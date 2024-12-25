@@ -42,7 +42,7 @@ the task file header."
 (defvar-local competitive-companion--current-task nil
   "Holds the current task's (i.e. problem), associated with its data dir.")
 
-(defvar-local competitive-companion--contest-directory nil
+(defvar competitive-companion--contest-directory nil
   "Holds the current contest's directory.")
 
 (define-minor-mode competitive-companion-mode
@@ -104,7 +104,7 @@ the task file header."
          (dir (competitive-companion--create-problem-directory slug))
          (temp-dir (make-temp-file slug t))
          (extension (competitive-companion--default-task-extension))
-         (task-filename (expand-file-name (concat slug extension) competitive-companion--contest-directory)))
+         (task-filename (expand-file-name (concat (substring name 0 1) extension) competitive-companion--contest-directory)))
     (competitive-companion--write-test-cases temp-dir tests)
     (unless (file-exists-p task-filename)
       (with-temp-file task-filename
@@ -114,7 +114,7 @@ the task file header."
 // Memory Limit: %s MB
 // Time Limit: %s ms
 //
-// Powered by competitive-companion.el
+// Powered by competitive-companion.el (https://github.com/luishgh/competitive-companion.el)
 
 " name group url memory-limit time-limit))
         (when competitive-companion-task-template-file
@@ -149,7 +149,7 @@ the task file header."
 (defun competitive-companion-run-tests (command)
   "Run all test cases for the current task using COMMAND.
 Reports success if all tests pass, or failure otherwise."
-  (interactive (list (read-shell-command "Command to run: ")))
+  (interactive (list (read-shell-command "Command to run: " (concat competitive-companion--contest-directory "/"))))
   (let* ((default-directory competitive-companion--current-task)
          (test-files (directory-files default-directory t "^input[0-9]+\.txt$"))
          (failed-outputs "")
