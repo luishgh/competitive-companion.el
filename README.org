@@ -1,0 +1,40 @@
+#+TITLE: Competitive Companion for Emacs
+
+Simple Emacs integration with [[https://github.com/jmerle/competitive-companion][competitive companion]]. /Still a work in progress/.
+
+** Features
+
+- Automatically download all task's sample test cases.
+- Generate task's implementation file with user's template.
+- Run program against all test cases, see wrong answers in pop-up (help) buffer.
+
+** Planned features
+
+- [ ] Support more veredicts (TLE, MLE, RTE).
+- [ ] Add/edit/run test cases directly in results buffer.
+- [ ] Automatic submission (offload to another software most probably)
+- [ ] Customization of supported languages.
+- [ ] Choosing the implementation language.
+- [ ] Commands for creating contest folder, changing contests, etc.
+
+** Non planned features
+
+- Compilation :: Emacs has a bunch of solutions for compilation already (~M-x compile~ for example)
+- Complex templating :: Use specific templating solutions for that.
+- Mouse friendly interface :: Why reach for the mouse during a contest? 🤨
+
+** Use instructions
+
+*** First time
+
+1. Download the [[https://github.com/jmerle/competitive-companion][competitive companion browser extension]] for your favorite (and supported) browser.
+2. Add the value of ~competitive-companion-server-port~ (=10050= by default) to /Custom ports/ in the extension's preferences menu.
+
+*** During contest
+
+1. Make a folder for the contest (doing this automatically is not currently supported) and open it with ~M-x dired~.
+2. Turn on ~competitive-companion-mode~. This automatically selects the current folder as the contest's folder and starts the connection with the browser extension.
+3. Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded to temporary files.
+4. Code!
+5. After compiling your program, run it against all test cases with ~M-x competitive-companion-run-tests~.
+6. Get that AC!
