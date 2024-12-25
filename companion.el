@@ -63,11 +63,6 @@ the task file header."
   :type 'integer
   :group 'competitive-companion)
 
-(defcustom competitive-companion-directory "~/competitive/"
-  "Directory to store problem files and test cases."
-  :type 'string
-  :group 'competitive-companion)
-
 (defun competitive-companion--start-server ()
   "Start a Competitive Companion server to receive problem data."
   (make-network-process
@@ -101,7 +96,6 @@ the task file header."
          (memory-limit (alist-get 'memoryLimit data))
          (time-limit (alist-get 'timeLimit data))
          (slug (replace-regexp-in-string "[\\/:*?\"<>| ]" "_" name))
-         (dir (competitive-companion--create-problem-directory slug))
          (temp-dir (make-temp-file slug t))
          (extension (competitive-companion--default-task-extension))
          (task-filename (expand-file-name (concat (substring name 0 1) extension) competitive-companion--contest-directory)))
@@ -122,14 +116,7 @@ the task file header."
     (with-current-buffer (find-file-noselect task-filename)
       (funcall competitive-companion-task-major-mode)
       (setq-local competitive-companion--current-task temp-dir))
-    (message "Problem '%s' (%s) fetched and saved to %s" name group dir)))
-
-(defun competitive-companion--create-problem-directory (slug)
-  "Create and return the problem directory using SLUG."
-  (let ((dir (expand-file-name slug competitive-companion-directory)))
-    (unless (file-exists-p dir)
-      (make-directory dir t))
-    dir))
+    (message "Problem '%s' (%s) fetched and saved to %s" name group (concat competitive-companion--contest-directory task-filename))))
 
 (defun competitive-companion--write-test-cases (directory test-cases)
   "Write TEST-CASES to DIRECTORY.  Each test case is a pair of input and output."
@@ -179,5 +166,4 @@ Reports success if all tests pass, or failure otherwise."
         (insert failed-outputs))))))
 
 (provide 'competitive-companion)
-
 ;;; competitive-companion.el ends here

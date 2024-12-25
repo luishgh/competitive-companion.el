@@ -29,6 +29,9 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 
 1. Download the [[https://github.com/jmerle/competitive-companion][competitive companion browser extension]] for your favorite (and supported) browser.
 2. Add the value of ~competitive-companion-server-port~ (=10050= by default) to /Custom ports/ in the extension's preferences menu.
+3. Set the following /custom/ variables to your liking:
+   - ~competitive-companion-task-major-mode~ :: major mode used by task implementations, this is used to automatically determine its extension.
+   - ~competitive-companion-task-template-file~ :: the user's template file, this is automatically inserted in generated task files.
 
 *** During contest
 
@@ -38,3 +41,8 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 4. Code!
 5. After compiling your program, run it against all test cases with ~M-x competitive-companion-run-tests~.
 6. Get that AC!
+
+*** Observations
+
+- If a file with task's letter (in capital case) already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases.
+- You need to run ~M-x competitive-companion-run-tests~ while inside the task implementation file's buffer. This helps ~competitive-companion.el~ determine which test cases it should run. You can, however, have multiple binaries (one standard and one compiled with a stress test flag, for example) for the same task and choose which one to run against the test cases.
