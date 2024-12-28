@@ -44,6 +44,12 @@
 (defvar competitive-companion--contest-directory nil
   "Holds the current contest's directory.")
 
+(defvar competitive-companion-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c C-r") #'competitive-companion-run-tests)
+    map)
+  "Keymap for `competitive-companion-mode'.")
+
 ;;;; Customization
 
 (defgroup competitive-companion nil
@@ -60,7 +66,7 @@
 
 (defcustom competitive-companion-task-template-file "~/Documents/Maratona/templ.cpp"
   "Path to a template file to use for task files.
-If non-nil, the contents of this file will be inserted verbatim below
+If file is non-empty, its contents will be inserted verbatim below
 the task file header."
   :type 'file
   :group 'competitive-companion)
@@ -70,23 +76,34 @@ the task file header."
   :type 'integer
   :group 'competitive-companion)
 
-(defun competitive-companion--default-task-extension ()
-  "Get the default file extension based on `competitive-companion-task-major-mode'."
-  (pcase competitive-companion-task-major-mode
-    ('c-mode ".c")
-    ('c++-mode ".cpp")
-    ('python-mode ".py")
-    ('java-mode ".java")
-    ('ruby-mode ".rb")
-    ('javascript-mode ".js")
-    (_ ".txt")))
+(defcustom competitive-companion-languages
+  '((c-mode . ".c")
+    (c++-mode . ".cpp")
+    (python-mode . ".py")
+    (java-mode . ".java")
+    (ruby-mode . ".rb")
+    (javascript-mode . ".js"))
+  "List of available languages to choose when fetching a new task.
+
+Each entry should be of the form (MAJOR-MODE . EXTENSION), where
+`MAJOR-MODE' is the name of the major mode used for that programming
+language and `EXTENSION' is a string indicating the file extension,
+always preceded by a dot."
+  :type 'list
+  :group 'competitive-companion)
 
 ;;;; Commands
 
 ;;;###autoload
 (define-minor-mode competitive-companion-mode
-  "Minor mode for Competitive Companion integration."
+  "Minor mode for Competitive Companion integration.
+Turning this on sets the variable
+`competitive-companion--contest-directory' to
+`default-directory', so it should be done inside
+the contest's dedicated folder."
+  :global t
   :lighter " CC"
+  :keymap competitive-companion-mode-map
   (if competitive-companion-mode
       (progn
         (setq competitive-companion--contest-directory default-directory)
@@ -98,7 +115,7 @@ the task file header."
     (message "Competitive Companion mode deactivated.")))
 
 (defun competitive-companion-run-tests (command)
-  "Run all test cases for the current task using COMMAND.
+  "Run all test cases for the current task using `COMMAND'.
 Reports success if all tests pass, or failure otherwise."
   (interactive (list (read-shell-command "Command to run: " competitive-companion--contest-directory)))
   (let* ((default-directory competitive-companion--current-task)
@@ -155,6 +172,12 @@ Reports success if all tests pass, or failure otherwise."
       (process-send-string connection "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
       (delete-process connection))))
 
+(defun competitive-companion--default-task-extension ()
+  "Get the default file extension based on `competitive-companion-task-major-mode'."
+  (let ((mode-name competitive-companion-task-major-mode))
+    (cdr (or (assoc mode-name competitive-companion-languages #'equal)
+             '("_" . ".txt")))))
+
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
   (let* ((name (alist-get 'name data))
@@ -184,7 +207,7 @@ Reports success if all tests pass, or failure otherwise."
     (with-current-buffer (find-file-noselect task-filename)
       (funcall competitive-companion-task-major-mode)
       (setq-local competitive-companion--current-task temp-dir))
-    (message "Problem '%s' (%s) fetched and saved to %s" name group (concat competitive-companion--contest-directory task-filename))))
+    (message "Problem '%s' (%s) fetched and saved to %s" name group task-filename)))
 
 (defun competitive-companion--write-test-cases (directory test-cases)
   "Write TEST-CASES to DIRECTORY.  Each test case is a pair of input and output."
