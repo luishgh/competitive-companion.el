@@ -66,8 +66,12 @@
 
 (defcustom competitive-companion-task-template-file "~/Documents/Maratona/templ.cpp"
   "Path to a template file to use for task files.
+
 If file is non-empty, its contents will be inserted verbatim below
-the task file header."
+the task file header.
+
+If the user prefers using proper templating packages for this,
+this variable should point to a non existing file."
   :type 'file
   :group 'competitive-companion)
 
@@ -114,10 +118,201 @@ the contest's dedicated folder."
     (delete-process "*competitive-companion-server*")
     (message "Competitive Companion mode deactivated.")))
 
+(require 'magit-section)
+
+(defun competitive-companion-run-tests-2 (command)
+  "Run all test cases for the current task using `COMMAND'.
+Reports success if all tests pass, or failure otherwise."
+  (interactive (progn
+                 (unless competitive-companion-mode
+                   (error "Competitive Companion mode is not turned on!"))
+                 (unless competitive-companion--current-task
+                   (error "The current task has not been fetched!"))
+                 (list (read-shell-command "Command to run: " competitive-companion--contest-directory))))
+
+  (let* ((default-directory competitive-companion--current-task)
+         (test-files (directory-files default-directory t "^input[0-9]+\\.txt$"))
+         (all-success t))
+    (with-current-buffer (get-buffer-create "*competitive-companion-output*")
+      (erase-buffer)
+      (magit-section-mode)
+      (let ((_ (magit-insert-section (root)
+                    (magit-insert-heading "Test Results"))))
+        (dolist (input-file test-files)
+          (let* ((match-input (file-name-nondirectory input-file))
+                 (_ (string-match "[0-9]+" match-input))
+                 (index (match-string 0 match-input))
+                 (output-file (format "output%s.txt" index))
+                 (actual-output (shell-command-to-string (format "%s < %s" command input-file)))
+                 (input-text (with-temp-buffer
+                               (insert-file-contents input-file)
+                               (buffer-string)))
+                 (expected-output (with-temp-buffer
+                                    (insert-file-contents output-file)
+                                    (buffer-string))))
+            (if (string= actual-output expected-output)
+                (magit-insert-section (success)
+                  (magit-insert-heading (format "Test %s: PASSED" index)))
+              (progn
+                (setq all-success nil)
+                (magit-insert-section (failure)
+                  (magit-insert-heading (format "Test %s: FAILED" index))
+                  (magit-insert-section-body (format "** Input:\n%s\n** Expected:\n%s\n** Got:\n%s\n"
+                                  input-text expected-output actual-output)))))))
+        (if all-success
+            (message "All tests passed!")
+          (message "Some tests failed."))))
+    (pop-to-buffer "*competitive-companion-output*")))
+
+(require 'magit-section)
+
+(defun competitive-companion-run-tests-5 (command)
+  "Run all test cases for the current task using `COMMAND'.
+Reports success if all tests pass, or failure otherwise."
+  (interactive (progn
+                 (unless competitive-companion-mode
+                   (error "Competitive Companion mode is not turned on!"))
+                 (unless competitive-companion--current-task
+                   (error "The current task has not been fetched!"))
+                 (list (read-shell-command "Command to run: " competitive-companion--contest-directory))))
+
+  (let* ((default-directory competitive-companion--current-task)
+         (test-files (directory-files default-directory t "^input[0-9]+\\.txt$"))
+         (all-success t))
+    (with-current-buffer (get-buffer-create "*competitive-companion-output*")
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (magit-section-mode)
+        (magit-insert-section (root)
+          (magit-insert-heading "Test Results")
+          (dolist (input-file test-files)
+            (let* ((match-input (file-name-nondirectory input-file))
+                   (_ (string-match "[0-9]+" match-input))
+                   (index (match-string 0 match-input))
+                   (output-file (format "output%s.txt" index))
+                   (actual-output (shell-command-to-string (format "%s < %s" command input-file)))
+                   (input-text (with-temp-buffer
+                                 (insert-file-contents input-file)
+                                 (buffer-string)))
+                   (expected-output (with-temp-buffer
+                                      (insert-file-contents output-file)
+                                      (buffer-string))))
+              (unless (string= actual-output expected-output)
+                (setq all-success nil)
+                (magit-insert-section (test-section :test-index index)
+                  (magit-insert-heading (format "Test %s" index))
+                  (magit-insert-section (input-section :test-index index :input-file input-file)
+                    (magit-insert-heading "Input")
+                    (insert (format "%s\n" input-text)))
+                  (magit-insert-section (expected-section :test-index index :output-file output-file)
+                    (magit-insert-heading "Expected Output")
+                    (insert (format "%s\n" expected-output)))
+                  (magit-insert-section (actual-section :test-index index)
+                    (magit-insert-heading "Actual Output")
+                    (insert (format "%s\n" actual-output))))))))
+        (if all-success
+            (message "All tests passed!")
+          (message "Some tests failed.")
+          (pop-to-buffer "*competitive-companion-output*"))))))
+(require 'magit-section)
+
+(defclass competitive-companion-root-section (magit-section) ())
+(defclass competitive-companion-test-section (magit-section)
+  ((test-index :initarg :test-index  :type string :documentation "Index of the test case.")))
+
+(defclass competitive-companion-input-section (magit-section)
+  ((file :initarg :file :type string :documentation "Path to the input file.")
+   (keymap :initform 'competitive-companion-file-section-map)))
+
+(defclass competitive-companion-expected-section (magit-section)
+  ((keymap :initform 'competitive-companion-file-section-map)
+   (file :initarg :file :type string :documentation "Path to the expected output file.")))
+
+;; comment: only RET works
+(defvar competitive-companion-file-section-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") 'competitive-companion--open-section-file)
+    (define-key map [mouse-2] 'competitive-companion--open-section-file)
+    (define-key map [follow-link] 'code-review-utils--visit-author-at-point)
+    map)
+  "Keymaps for header author section.")
+
+(defclass competitive-companion-actual-section (magit-section) ())
+
+(defun competitive-companion-run-tests-6 (command)
+  "Run all test cases for the current task using `COMMAND'.
+Reports success if all tests pass, or failure otherwise."
+  (interactive (progn
+                 (unless competitive-companion-mode
+                   (error "Competitive Companion mode is not turned on!"))
+                 (unless competitive-companion--current-task
+                   (error "The current task has not been fetched!"))
+                 (list (read-shell-command "Command to run: " competitive-companion--contest-directory))))
+
+  (let* ((default-directory competitive-companion--current-task)
+         (task (file-name-nondirectory default-directory))
+         (test-files (directory-files default-directory t "^input[0-9]+\.txt$"))
+         (all-success t))
+    (with-current-buffer (get-buffer-create (format "*competitive-companion-output* [%s]" task))
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (magit-section-mode)
+        (magit-insert-section (competitive-companion-root-section)
+          (magit-insert-heading "Test Results")
+          (dolist (input-file test-files)
+            (let* ((match-input (file-name-nondirectory input-file))
+                   (_ (string-match "[0-9]+" match-input))
+                   (index (match-string 0 match-input))
+                   (output-file (format "output%s.txt" index))
+                   (actual-output (shell-command-to-string (format "%s < %s" command input-file)))
+                   (input-text (with-temp-buffer
+                                 (insert-file-contents input-file)
+                                 (buffer-string)))
+                   (expected-output (with-temp-buffer
+                                      (insert-file-contents output-file)
+                                      (buffer-string))))
+              (unless (string= actual-output expected-output)
+                (setq all-success nil)
+                (magit-insert-section (competitive-companion-test-section :test-index index)
+                  (magit-insert-heading (format "Test %s" index))
+                  (magit-insert-section (competitive-companion-input-section input-file)
+                    (magit-insert-heading "Input")
+                    (insert (format "%s\n" input-text)))
+                  (magit-insert-section (competitive-companion-expected-section output-file)
+                    (magit-insert-heading "Expected Output")
+                    (insert (format "%s\n" expected-output)))
+                  (magit-insert-section (competitive-companion-actual-section)
+                    (magit-insert-heading "Actual Output")
+                    (insert (format "%s\n" actual-output))))))))
+        (if all-success
+            (message "All tests passed!")
+          (message "Some tests failed.")
+          (pop-to-buffer (format "*competitive-companion-output* [%s]" task)))))))
+
+(defun competitive-companion--open-section-file ()
+  "Open the file associated with the current section."
+  (interactive)
+  (let ((section (magit-current-section)))
+    (when section
+      (let ((file (cond
+                   ((object-of-class-p section competitive-companion-input-section)
+                    (oref section value))
+                   ((object-of-class-p section competitive-companion-expected-section)
+                    (oref section value)))))
+        (if file
+            (find-file file)
+          (message "No file associated with this section."))))))
+
 (defun competitive-companion-run-tests (command)
   "Run all test cases for the current task using `COMMAND'.
 Reports success if all tests pass, or failure otherwise."
-  (interactive (list (read-shell-command "Command to run: " competitive-companion--contest-directory)))
+  (interactive (progn
+                 (unless competitive-companion-mode
+                   (error "Competitive Companion mode is not turned on!"))
+                 (unless competitive-companion--current-task
+                   (error "The current task has not been fetched!"))
+                 (list (read-shell-command "Command to run: " competitive-companion--contest-directory))))
+
   (let* ((default-directory competitive-companion--current-task)
          (test-files (directory-files default-directory t "^input[0-9]+\.txt$"))
          (failed-outputs "")
@@ -129,8 +324,8 @@ Reports success if all tests pass, or failure otherwise."
              (output-file (format "output%s.txt" index))
              (actual-output (shell-command-to-string (format "%s < %s" command input-file)))
              (input-text (with-temp-buffer
-                                (insert-file-contents input-file)
-                                (buffer-string)))
+                           (insert-file-contents input-file)
+                           (buffer-string)))
              (expected-output (with-temp-buffer
                                 (insert-file-contents output-file)
                                 (buffer-string))))
@@ -138,13 +333,13 @@ Reports success if all tests pass, or failure otherwise."
           (setq all-success nil)
           (setq failed-outputs
                 (concat failed-outputs
-                  (format "* Test %s failed.\n** Input:\n%s\n** Expected:\n%s\n** Got:\n%s\n" index input-text expected-output actual-output)))))
-    (if all-success
-        (message "All tests passed!")
-      (with-help-window "*competitive-companion-output*"
-        (outline-minor-mode)
-        (message "Some tests failed.")
-        (insert failed-outputs))))))
+                        (format "* Test %s failed.\n** Input:\n%s\n** Expected:\n%s\n** Got:\n%s\n" index input-text expected-output actual-output)))))
+      (if all-success
+          (message "All tests passed!")
+        (with-help-window "*competitive-companion-output*"
+          (outline-minor-mode)
+          (message "Some tests failed.")
+          (insert failed-outputs))))))
 
 ;;;; Functions
 
