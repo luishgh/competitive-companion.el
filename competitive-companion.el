@@ -152,17 +152,22 @@ the contest's dedicated folder."
 Reports success if all tests pass, or failure otherwise."
   (interactive (progn
                  (unless competitive-companion-mode
-                   (error "Competitive Companion mode is not turned on!"))
+                   (error "Competitive Companion mode is not turned on"))
                  (unless competitive-companion--current-task
-                   (error "The current task has not been fetched!"))
-                 (list (read-shell-command "Command to run: " competitive-companion--contest-directory))))
+                   (error "The current task has not been fetched"))
+                 (list (expand-file-name
+                                (read-shell-command "Command to run: " competitive-companion--contest-directory)))))
 
-  (let* ((default-directory competitive-companion--current-task)
-         (task (substring (file-name-nondirectory default-directory) 0 1))
-         (test-files (directory-files default-directory t "^input[0-9]+\.txt$"))
-         (all-success t))
-    (with-current-buffer (get-buffer-create (format "*competitive-companion-output* [%s]" task))
-      (let ((inhibit-read-only t))
+  (let* ((task-directory competitive-companion--current-task)
+         (default-directory task-directory)
+         (task-hashname (file-name-nondirectory task-directory)) ;; FIXME: better name or kill buffer if present
+         (task (substring task-hashname 0 1))
+         (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
+         (all-success t)
+         (output-buffer (generate-new-buffer (format "*competitive-companion-output* [%s]" task-hashname))))
+    (with-current-buffer output-buffer
+      (let ((inhibit-read-only t)
+            (default-directory task-directory))
         (erase-buffer)
         (magit-section-mode)
         (magit-insert-section (competitive-companion-root-section)
@@ -173,7 +178,7 @@ Reports success if all tests pass, or failure otherwise."
                    (_ (string-match "[0-9]+" match-input))
                    (index (match-string 0 match-input))
                    (output-file (format "output%s.txt" index))
-                   (actual-output (shell-command-to-string (format "%s < %s" command input-file)))
+                   (actual-output (shell-command-to-string (format "\"%s\" < \"%s\"" command input-file)))
                    (input-text (with-temp-buffer
                                  (insert-file-contents input-file)
                                  (buffer-string)))
@@ -196,7 +201,7 @@ Reports success if all tests pass, or failure otherwise."
         (if all-success
             (message "All tests passed!")
           (message "Some tests failed.")
-          (pop-to-buffer (format "*competitive-companion-output* [%s]" task)))))))
+          (pop-to-buffer output-buffer))))))
 
 (defun competitive-companion--open-section-file ()
   "Open the file associated with the current section."

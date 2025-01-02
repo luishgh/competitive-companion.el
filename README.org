@@ -41,7 +41,7 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 2. Turn on ~competitive-companion-mode~. This automatically selects the current folder as the contest's folder and starts the connection with the browser extension.
 3. Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded to temporary files.
 4. Code!
-5. After compiling your program, run it against all test cases with ~competitive-companion-run-tests~. The outputs buffer uses ~magit-section~, the library that implements the togglable sections of [[https://magit.vc/][Magit]], which means all the bindings you would typically expect on such an interface works!
+5. After compiling your program, run it against all test cases with ~competitive-companion-run-tests~. The outputs buffer uses ~magit-section~, the library that implements the togglable sections of [[https://magit.vc/][Magit]], which means all the bindings you would typically expect on such an interface works! (*Tip*: check all the enabled bindings with =C-h m=)
 6. Get that AC!
 
 *** Observations
