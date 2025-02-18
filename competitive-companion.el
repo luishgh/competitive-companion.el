@@ -206,16 +206,12 @@ Reports success if all tests pass, or failure otherwise."
 (defun competitive-companion--open-section-file ()
   "Open the file associated with the current section."
   (interactive)
-  (let ((section (magit-current-section)))
-    (when section
-      (let ((file (cond
-                   ((object-of-class-p section competitive-companion-input-section)
-                    (oref section value))
-                   ((object-of-class-p section competitive-companion-expected-section)
-                    (oref section value)))))
-        (if file
-            (find-file file)
-          (message "No file associated with this section."))))))
+  (let ((file
+         (magit-section-value-if
+          '(competitive-companion-input-section competitive-companion-expected-section))))
+    (if file
+        (find-file file)
+      (message "No file associated with this section."))))
 
 ;;;; Functions
 
