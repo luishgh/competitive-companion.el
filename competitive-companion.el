@@ -106,6 +106,14 @@ always preceded by a dot."
   :type 'list
   :group 'competitive-companion)
 
+(defcustom competitive-companion-collapse-test-cases 't
+  "Controls whether test cases in the output buffer should be initially collapsed.
+
+If it is set to nil, all test cases are initially
+expanded."
+  :type 'symbol
+  :group 'competitive-companion)
+
 ;;;; Commands
 
 ;;;###autoload
@@ -187,7 +195,7 @@ Reports success if all tests pass, or failure otherwise."
                                       (buffer-string))))
               (unless (string= actual-output expected-output)
                 (setq all-success nil)
-                (magit-insert-section (competitive-companion-test-section :test-index index)
+                (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
                   (magit-insert-heading (format "Test %s" index))
                   (magit-insert-section (competitive-companion-input-section input-file)
                     (magit-insert-heading "Input")
