@@ -99,7 +99,7 @@ this variable should point to a non existing file."
     (javascript-mode . ".js"))
   "List of available languages to choose when fetching a new task.
 
-Each entry should be of the form (MAJOR-MODE . EXTENSION), where
+Each entry should be of the form `(MAJOR-MODE . EXTENSION)', where
 `MAJOR-MODE' is the name of the major mode used for that programming
 language and `EXTENSION' is a string indicating the file extension,
 always preceded by a dot."
