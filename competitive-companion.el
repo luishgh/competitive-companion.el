@@ -114,6 +114,11 @@ expanded."
   :type 'symbol
   :group 'competitive-companion)
 
+(defcustom competitive-companion-prompt-task-filename nil
+  "If non-nil, prompt for a task filename instead of automatically generating one."
+  :type 'boolean
+  :group 'competitive-companion)
+
 ;;;; Commands
 
 ;;;###autoload
@@ -243,9 +248,9 @@ Reports success if all tests pass, or failure otherwise."
                   (error nil))))
       (if (not (and data (listp data)))
           (message "Invalid data received from Competitive Companion: '%s'" body)
-        (competitive-companion--process-data data))
-      (process-send-string connection "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-      (delete-process connection))))
+        (process-send-string connection "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+        (delete-process connection)
+        (competitive-companion--process-data data)))))
 
 (defun competitive-companion--default-task-extension ()
   "Get the default file extension based on `competitive-companion-task-major-mode'."
@@ -256,9 +261,21 @@ Reports success if all tests pass, or failure otherwise."
 (defun competitive-companion--task-filename (name)
   "Return the filename used for task named `NAME'.
 
-`NAME' is expected to be the value from the name field of a response
-from the Competitive Companion browser extension."
-  (concat (substring name 0 1) (competitive-companion--default-task-extension)))
+If `competitive-companion-prompt-task-filename' is non-nil, prompt for
+the filename.  Otherwise, generate it automatically based on `NAME'."
+  (let ((default-filename (concat (substring name 0 1)
+                                  (competitive-companion--default-task-extension))))
+    (if competitive-companion-prompt-task-filename
+        (read-file-name "Task file: " competitive-companion--contest-directory
+                        (expand-file-name default-filename competitive-companion--contest-directory))
+      default-filename)))
+
+;; (defun competitive-companion--task-filename (name)
+;;   "Return the filename used for task named `NAME'.
+
+;; `NAME' is expected to be the value from the name field of a response
+;; from the Competitive Companion browser extension."
+;;   (concat (substring name 0 1) (competitive-companion--default-task-extension)))
 
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
