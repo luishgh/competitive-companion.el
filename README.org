@@ -2,8 +2,7 @@
 
 Simple Emacs integration with [[https://github.com/jmerle/competitive-companion][competitive companion]]. /Still a work in progress/.
 
-[[https://github.com/luishgh/Dotfiles/blob/master/Emacs.org#competitive-companion
-][My personal configuration]], you may take it as a slightly undocumented inspiration for yours.
+[[https://github.com/luishgh/Dotfiles/blob/master/Emacs.org#competitive-companion][My personal configuration]], you may take it as a slightly undocumented inspiration for yours.
 
 ** Features
 
