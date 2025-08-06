@@ -103,7 +103,7 @@ Each entry should be of the form `(MAJOR-MODE . EXTENSION)', where
 `MAJOR-MODE' is the name of the major mode used for that programming
 language and `EXTENSION' is a string indicating the file extension,
 always preceded by a dot."
-  :type 'list
+  :type '(list (cons symbol string))
   :group 'competitive-companion)
 
 (defcustom competitive-companion-collapse-test-cases 't
@@ -139,6 +139,7 @@ the contest's dedicated folder."
     (setq competitive-companion--contest-directory nil)
     (setq competitive-companion--current-task nil)
     (delete-process "*competitive-companion-server*")
+    (competitive-companion--kill-buffers)
     (message "Competitive Companion mode deactivated.")))
 
 ;; TODO: rework those classes, they don't work exactly as
@@ -315,6 +316,13 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
                  (output-file (expand-file-name (format "output%d.txt" index) directory)))
              (write-region (alist-get 'input test) nil input-file)
              (write-region (alist-get 'output test) nil output-file))))
+
+(defun competitive-companion--kill-buffers ()
+  "Kill all buffers that start with '*competitive-companion'."
+  (dolist (buffer (buffer-list))
+    (let ((buffer-name (buffer-name buffer)))
+      (when (and buffer-name (string-prefix-p "*competitive-companion" buffer-name))
+        (kill-buffer buffer)))))
 
 (provide 'competitive-companion)
 ;;; competitive-companion.el ends here
