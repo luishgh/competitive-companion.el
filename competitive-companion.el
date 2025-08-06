@@ -192,7 +192,7 @@ Reports success if all tests pass, or failure otherwise."
                    (_ (string-match "[0-9]+" match-input))
                    (index (match-string 0 match-input))
                    (output-file (format "output%s.txt" index))
-                   (actual-output (shell-command-to-string (format "\"%s\" < \"%s\"" command input-file)))
+                   (actual-output (competitive-companion--run-program command input-file))
                    (input-text (with-temp-buffer
                                  (insert-file-contents input-file)
                                  (buffer-string)))
@@ -271,13 +271,6 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
                         (expand-file-name default-filename competitive-companion--contest-directory))
       default-filename)))
 
-;; (defun competitive-companion--task-filename (name)
-;;   "Return the filename used for task named `NAME'.
-
-;; `NAME' is expected to be the value from the name field of a response
-;; from the Competitive Companion browser extension."
-;;   (concat (substring name 0 1) (competitive-companion--default-task-extension)))
-
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
   (let* ((name (alist-get 'name data))
@@ -323,6 +316,15 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
     (let ((buffer-name (buffer-name buffer)))
       (when (and buffer-name (string-prefix-p "*competitive-companion" buffer-name))
         (kill-buffer buffer)))))
+
+(defun competitive-companion--run-program (command input-file)
+  "Run COMMAND with INPUT-FILE as input.
+
+This trims whitespace at each line and then return the
+whole file content as string."
+  (let* ((output (shell-command-to-string (format "\"%s\" < \"%s\"" command input-file)))
+         (output-lines (split-string output "\n" t "[ \\t\\n\\r]+")))
+    (concat (string-join output-lines "\n") "\n")))
 
 (provide 'competitive-companion)
 ;;; competitive-companion.el ends here
