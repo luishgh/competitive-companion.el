@@ -1,6 +1,6 @@
 ;;; competitive-companion.el --- Competitive Companion Integration -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024 Luis Higino
+;; Copyright (C) 2024, 2025 Luis Higino
 
 ;; Author: Luis Higino <luis.higino@dcc.ufmg.br>
 ;; URL: https://github.com/luishgh/competitive-companion.el
