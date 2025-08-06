@@ -119,6 +119,11 @@ expanded."
   :type 'boolean
   :group 'competitive-companion)
 
+(defcustom competitive-companion-separate-stderr nil
+  "If non-nil, stdout and stderr are shown separately on output buffers."
+  :type 'boolean
+  :group 'competitive-companion)
+
 ;;;; Commands
 
 ;;;###autoload
@@ -170,7 +175,7 @@ Reports success if all tests pass, or failure otherwise."
                  (unless competitive-companion--current-task
                    (error "The current task has not been fetched"))
                  (list (expand-file-name
-                                (read-shell-command "Command to run: " competitive-companion--contest-directory)))))
+                        (read-shell-command "Command to run: " competitive-companion--contest-directory)))))
 
   (let* ((task-directory competitive-companion--current-task)
          (default-directory task-directory)
@@ -178,6 +183,7 @@ Reports success if all tests pass, or failure otherwise."
          (task (substring task-hashname 0 1))
          (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
          (all-success t)
+         (empty-stderr t)
          (output-buffer (generate-new-buffer (format "*competitive-companion-output* [%s]" task-hashname))))
     (with-current-buffer output-buffer
       (let ((inhibit-read-only t)
@@ -199,21 +205,36 @@ Reports success if all tests pass, or failure otherwise."
                    (expected-output (with-temp-buffer
                                       (insert-file-contents output-file)
                                       (buffer-string))))
-              (unless (string= actual-output expected-output)
-                (setq all-success nil)
-                (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
-                  (magit-insert-heading (format "Test %s" index))
-                  (magit-insert-section (competitive-companion-input-section input-file)
-                    (magit-insert-heading "Input")
-                    (insert (format "%s\n" input-text)))
-                  (magit-insert-section (competitive-companion-expected-section output-file)
-                    (magit-insert-heading "Expected Output")
-                    (insert (format "%s\n" expected-output)))
-                  (magit-insert-section (competitive-companion-actual-section)
-                    (magit-insert-heading "Actual Output")
-                    (insert (format "%s\n" actual-output))))))))
+              (progn
+                (unless (string-empty-p (cadr actual-output))
+                  (setq empty-stderr nil))
+                (unless (string= (car actual-output) expected-output)
+                  (setq all-success nil)
+                  (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
+                    (magit-insert-heading (format "Test %s" index))
+                    (magit-insert-section (competitive-companion-input-section input-file)
+                      (magit-insert-heading "Input")
+                      (insert (format "%s\n" input-text)))
+                    (magit-insert-section (competitive-companion-expected-section output-file)
+                      (magit-insert-heading "Expected Output")
+                      (insert (format "%s\n" expected-output)))
+                    (if (and competitive-companion-separate-stderr
+                             (not (string-empty-p (cadr actual-output))))
+                        (progn
+                          (magit-insert-section (competitive-companion-actual-section)
+                            (magit-insert-heading "Actual Output")
+                            (insert (format "%s\n" (car actual-output))))
+                          (magit-insert-section (competitive-companion-actual-section)
+                            (magit-insert-heading "Actual Output [stderr]")
+                            (insert (format "%s\n" (cadr actual-output)))))
+                      (magit-insert-section (competitive-companion-actual-section)
+                        (magit-insert-heading "Actual Output")
+                        (insert (format "%s\n" (car actual-output)))))))))))
         (if all-success
-            (message "All tests passed!")
+            (if empty-stderr
+                (message "All tests passed!")
+              (message "All tests passed! [stderr IS BEING USED]"))
+
           (message "Some tests failed.")
           (pop-to-buffer output-buffer))))))
 
@@ -320,11 +341,26 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
 (defun competitive-companion--run-program (command input-file)
   "Run COMMAND with INPUT-FILE as input.
 
-This trims whitespace at each line and then return the
-whole file content as string."
-  (let* ((output (shell-command-to-string (format "\"%s\" < \"%s\"" command input-file)))
-         (output-lines (split-string output "\n" t "[ \\t\\n\\r]+")))
-    (concat (string-join output-lines "\n") "\n")))
+Trims trailing whitespace from each line of stdout.  Returns a list
+containing two strings (stdout and stderr separately)."
+  (let ((stdout-buffer (generate-new-buffer " *cc-stdout*"))
+        (stderr-file (make-temp-file "cc-stderr-")))
+    (unwind-protect
+        (progn
+          ;; Call the command, redirecting stdout to buffer, stderr to file
+          (call-process command input-file (list stdout-buffer stderr-file))
+
+          ;; Process stdout
+          (let* ((stdout (with-current-buffer stdout-buffer
+                           (split-string (buffer-string) "\n" t "[ \\t\\n\\r]+")))
+                 (joined-stdout (concat (string-join stdout "\n") "\n"))
+                 (stderr (with-temp-buffer
+                           (insert-file-contents stderr-file)
+                           (buffer-string))))
+                (list joined-stdout stderr)))
+      ;; Cleanup
+      (kill-buffer stdout-buffer)
+      (delete-file stderr-file))))
 
 (provide 'competitive-companion)
 ;;; competitive-companion.el ends here
