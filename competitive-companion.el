@@ -229,7 +229,7 @@ Reports success if all tests pass, or failure otherwise."
                             (insert (format "%s\n" (cadr actual-output)))))
                       (magit-insert-section (competitive-companion-actual-section)
                         (magit-insert-heading "Actual Output")
-                        (insert (format "%s\n" (car actual-output)))))))))))
+                        (insert (format "%s\n" (concat (caddr actual-output))))))))))))
         (if all-success
             (if empty-stderr
                 (message "All tests passed!")
@@ -342,22 +342,29 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
   "Run COMMAND with INPUT-FILE as input.
 
 Trims trailing whitespace from each line of stdout.  Returns a list
-containing two strings (stdout and stderr separately)."
-  (let ((stdout-buffer (generate-new-buffer " *cc-stdout*"))
+containing three strings (stdout, stderr and both together)."
+  (let ((out-buffer (generate-new-buffer " *cc-out*"))
+        (stdout-buffer (generate-new-buffer " *cc-stdout*"))
         (stderr-file (make-temp-file "cc-stderr-")))
     (unwind-protect
         (progn
+
+          (call-process command input-file (list out-buffer t))
+
           ;; Call the command, redirecting stdout to buffer, stderr to file
           (call-process command input-file (list stdout-buffer stderr-file))
 
           ;; Process stdout
-          (let* ((stdout (with-current-buffer stdout-buffer
-                           (split-string (buffer-string) "\n" t "[ \\t\\n\\r]+")))
+          (let* ((out (with-current-buffer out-buffer
+                           (split-string (buffer-string) "\n" t "[ \t\r]+")))
+                 (stdout (with-current-buffer stdout-buffer
+                           (split-string (buffer-string) "\n" t "[ \t\r]+")))
                  (joined-stdout (concat (string-join stdout "\n") "\n"))
+                 (joined-out (concat (string-join out "\n") "\n"))
                  (stderr (with-temp-buffer
                            (insert-file-contents stderr-file)
                            (buffer-string))))
-                (list joined-stdout stderr)))
+            (list joined-stdout stderr joined-out)))
       ;; Cleanup
       (kill-buffer stdout-buffer)
       (delete-file stderr-file))))
