@@ -251,15 +251,18 @@ Reports success if all tests pass, or failure otherwise."
 ;;;; Functions
 
 (defun competitive-companion--start-server ()
-  "Start a Competitive Companion server to receive problem data."
-  (make-network-process
-   :name "competitive-companion-server"
-   :buffer "*competitive-companion-server*"
-   :host "127.0.0.1"
-   :service competitive-companion-server-port
-   :family 'ipv4
-   :server t
-   :filter 'competitive-companion--handle-request))
+  "Start a Competitive Companion server to receive problem data.
+
+If a server is already running, fails silently."
+  (unless (get-process "competitive-companion-server")
+    (make-network-process
+     :name "competitive-companion-server"
+     :buffer "*competitive-companion-server*"
+     :host "127.0.0.1"
+     :service competitive-companion-server-port
+     :family 'ipv4
+     :server t
+     :filter 'competitive-companion--handle-request)))
 
 (defun competitive-companion--handle-request (connection message)
   "Handle incoming MESSAGE from the Competitive Companion CONNECTION."
