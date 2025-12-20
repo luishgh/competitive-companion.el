@@ -59,6 +59,8 @@
     map)
   "Keymap for output buffer's file sections.")
 
+(defvar competitive-companion--prompt-task-filename nil
+  "Holds value of `competitive-companion-prompt-task-filename' when mode turns on.")
 
 ;;;; Customization
 
@@ -115,7 +117,10 @@ expanded."
   :group 'competitive-companion)
 
 (defcustom competitive-companion-prompt-task-filename nil
-  "If non-nil, prompt for a task filename instead of automatically generating one."
+  "If non-nil, prompt for a task filename instead of automatically generating one.
+This option must be set to the correct value BEFORE turning on the mode,
+because it is only read when turning on.
+This is to enable setting it as a directory local variable consistently."
   :type 'boolean
   :group 'competitive-companion)
 
@@ -139,6 +144,7 @@ the contest's dedicated folder."
   (if competitive-companion-mode
       (progn
         (setq competitive-companion--contest-directory default-directory)
+        (setq competitive-companion--prompt-task-filename competitive-companion-prompt-task-filename)
         (competitive-companion--start-server)
         (message "Competitive Companion mode activated."))
     (setq competitive-companion--contest-directory nil)
@@ -290,7 +296,7 @@ If `competitive-companion-prompt-task-filename' is non-nil, prompt for
 the filename.  Otherwise, generate it automatically based on `NAME'."
   (let ((default-filename (concat (substring name 0 1)
                                   (competitive-companion--default-task-extension))))
-    (if competitive-companion-prompt-task-filename
+    (if competitive-companion--prompt-task-filename
         (read-file-name "Task file: " competitive-companion--contest-directory
                         (expand-file-name default-filename competitive-companion--contest-directory))
       default-filename)))
