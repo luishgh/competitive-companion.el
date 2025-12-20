@@ -72,7 +72,8 @@
 ;;;;; Options
 
 (defcustom competitive-companion-task-major-mode 'c++-mode
-  "Major mode for task's implementation file."
+  "Major mode for task's implementation file.
+Make sure the mode defines comment syntax!"
   :type 'symbol
   :group 'competitive-companion)
 
@@ -126,6 +127,11 @@ This is to enable setting it as a directory local variable consistently."
 
 (defcustom competitive-companion-separate-stderr nil
   "If non-nil, stdout and stderr are shown separately on output buffers."
+  :type 'boolean
+  :group 'competitive-companion)
+
+(defcustom competitive-companion-insert-header t
+  "If non-nil, insert the package's header on created files."
   :type 'boolean
   :group 'competitive-companion)
 
@@ -301,6 +307,27 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
                         (expand-file-name default-filename competitive-companion--contest-directory))
       default-filename)))
 
+(defun competitive-companion--insert-header (name group url memory-limit time-limit)
+  "Insert the package's header on current buffer.
+Uses NAME as problem's name, GROUP as the contest's name,
+and the others (URL, MEMORY-LIMIT and TIME-LIMIT) have self explanatory names.
+MEMORY-LIMIT is in MBs and TIME-LIMIT in ms."
+  (when competitive-companion-insert-header
+    (unless comment-start
+      (error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
+    (let ((start (point)))
+      (insert (format "Problem: '%s'
+Contest: '%s'
+URL: '%s'
+Memory Limit: %s MB
+Time Limit: %s ms
+
+Powered by competitive-companion.el (https://github.com/luishgh/competitive-companion.el)
+
+" name group url memory-limit time-limit))
+      (funcall competitive-companion-task-major-mode)
+      (comment-region start (point)))))
+
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
   (let* ((name (alist-get 'name data))
@@ -315,15 +342,8 @@ the filename.  Otherwise, generate it automatically based on `NAME'."
     (competitive-companion--write-test-cases temp-dir tests)
     (unless (file-exists-p task-filename)
       (with-temp-file task-filename
-		(insert (format "// Problem: '%s'
-// Contest: '%s'
-// URL: '%s'
-// Memory Limit: %s MB
-// Time Limit: %s ms
-//
-// Powered by competitive-companion.el (https://github.com/luishgh/competitive-companion.el)
-
-" name group url memory-limit time-limit))
+        (competitive-companion--insert-header
+         name group url memory-limit time-limit)
         (when competitive-companion-task-template-file
           (insert-file-contents competitive-companion-task-template-file))))
     (with-current-buffer (find-file-noselect task-filename)
