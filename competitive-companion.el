@@ -5,7 +5,7 @@
 ;; Author: Luis Higino <luis.higino@dcc.ufmg.br>
 ;; URL: https://github.com/luishgh/competitive-companion.el
 ;; Created: 25 Dec 2024
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "28.1") (magit-section "4.0.0"))
 ;; Keywords: convenience
 
 ;;; License:
@@ -41,6 +41,18 @@
 (defvar-local competitive-companion--current-task nil
   "Holds the current task's (i.e. problem), associated with its data dir.")
 
+(defvar-local competitive-companion--test-count nil
+  "Holds the number of test cases for output buffer's task.")
+
+(defvar-local competitive-companion--original-test-count nil
+  "Holds the original number of test cases for output buffer's task.")
+
+(defvar-local competitive-companion--output-buffer nil
+  "Holds the output buffer corresponding to this implementation file.")
+
+(defvar-local competitive-companion--current-command nil
+  "Holds last called command for output buffer.")
+
 (defvar competitive-companion--contest-directory nil
   "Holds the current contest's directory.")
 
@@ -50,14 +62,24 @@
     map)
   "Keymap for `competitive-companion-mode'.")
 
+(defvar competitive-companion-test-section-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "-") 'competitive-companion--remove-test-section-files)
+    map)
+  "Keymap for output buffer's file sections.")
+
 ;; comment: only RET works currently
 (defvar competitive-companion-file-section-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") 'competitive-companion--open-section-file)
     (define-key map [mouse-2] 'competitive-companion--open-section-file)
-    (define-key map [follow-link] 'code-review-utils--visit-author-at-point)
     map)
   "Keymap for output buffer's file sections.")
+
+(defvar competitive-companion-output-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "+") 'competitive-companion--add-test-case)
+    map))
 
 (defvar competitive-companion--prompt-task-filename nil
   "Holds value of `competitive-companion-prompt-task-filename' when mode turns on.")
@@ -142,10 +164,17 @@ This is to enable setting it as a directory local variable consistently."
   (lambda (name)
     (when (string-match "\\`[[:alnum:]]+" name)
       (downcase (match-string 0 name))))
-  "Function that generates the task filename, receives problem's NAME (Competitive Companion field).
-The default behaviour extracts the first alphanumerical characters from NAME and use them, lowercased, as filenames.
-This behaviour works on Codeforces and AtCoder, it is recommended to try it for yourself
+  "Function that generates the task filename based on problem's `NAME'.
+`NAME' is the field received from the browser extension, tipically looks like:
+\"C2. The Cunning Seller (hard version)\" or
+\"F - Common Prefixes\".
+
+The default behaviour extracts the first alphanumerical characters from
+`NAME' and uses them, lowercased, as filename.
+This behaviour works on Codeforces and AtCoder,
+it is recommended to try it for yourself
 and customize this (possibly on a dir local basis) for other judges.
+
 Unfornunately, an everywhere works, sensible solution seems impossible."
   :type 'function
   :group 'competitive-companion)
@@ -170,9 +199,14 @@ the contest's dedicated folder."
         (message "Competitive Companion mode activated."))
     (setq competitive-companion--contest-directory nil)
     (setq competitive-companion--current-task nil)
+    (setq competitive-companion--prompt-task-filename nil)
     (delete-process "*competitive-companion-server*")
     (competitive-companion--kill-buffers)
     (message "Competitive Companion mode deactivated.")))
+
+(define-derived-mode competitive-companion-output-mode magit-section-mode "Competitive Companion Output"
+  :interactive nil
+  (setq-local revert-buffer-function #'competitive-companion-output-revert))
 
 ;; TODO: rework those classes, they don't work exactly as
 ;; intended. Only the keymap field is used, the file is recovered by
@@ -181,7 +215,8 @@ the contest's dedicated folder."
 
 (defclass competitive-companion-root-section (magit-section) ())
 (defclass competitive-companion-test-section (magit-section)
-  ((test-index :initarg :test-index  :type string :documentation "Index of the test case.")))
+  ((test-index :initarg :test-index  :type string :documentation "Index of the test case.")
+   (keymap :initform 'competitive-companion-test-section-map)))
 
 (defclass competitive-companion-input-section (magit-section)
   ((file :initarg :file :type string :documentation "Path to the input file.")
@@ -193,30 +228,54 @@ the contest's dedicated folder."
 
 (defclass competitive-companion-actual-section (magit-section) ())
 
-(defun competitive-companion-run-tests (command)
-  "Run all test cases for the current task using `COMMAND'.
-Reports success if all tests pass, or failure otherwise."
+(defun competitive-companion-output-revert (_ignore-auto _noconfirm)
+  "Revert current Competitive Companion output buffer, using last used command."
+  (interactive)
+  (unless competitive-companion--current-command
+    (error "`competitive-companion--current-command' is not set! Cannot revert output buffer!"))
+  (competitive-companion-run-tests competitive-companion--current-command (current-buffer)))
+
+(defun competitive-companion-run-tests (command output-buffer)
+  "Run all test cases for current task using `COMMAND'.
+Reports success if all tests pass,
+show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
   (interactive (progn
                  (unless competitive-companion-mode
                    (error "Competitive Companion mode is not turned on"))
                  (unless competitive-companion--current-task
                    (error "The current task has not been fetched"))
                  (list (expand-file-name
-                        (read-shell-command "Command to run: " competitive-companion--contest-directory)))))
+                        (read-shell-command "Command to run: " competitive-companion--contest-directory))
+                       (if (buffer-live-p competitive-companion--output-buffer)
+                           competitive-companion--output-buffer
+                         (setq-local competitive-companion--output-buffer (generate-new-buffer "*competitive-companion-output*"))
+                         competitive-companion--output-buffer))))
 
   (let* ((task-directory competitive-companion--current-task)
          (default-directory task-directory)
          (task-hashname (file-name-nondirectory task-directory)) ;; FIXME: better name or kill buffer if present
          (task (substring task-hashname 0 1))
          (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
+         (original-test-count competitive-companion--original-test-count)
          (all-success t)
-         (empty-stderr t)
-         (output-buffer (generate-new-buffer (format "*competitive-companion-output* [%s]" task-hashname))))
+         (empty-stderr t))
     (with-current-buffer output-buffer
       (let ((inhibit-read-only t)
             (default-directory task-directory))
+
+        ;; we don't want the test count to reset if the user reverts the buffer
+        (put 'competitive-companion--test-count 'permanent-local t)
+
         (erase-buffer)
-        (magit-section-mode)
+        (competitive-companion-output-mode)
+
+        ;; save some metadata on output buffer:
+        (setq-local competitive-companion--current-task task-directory)
+        (setq-local competitive-companion--current-command command)
+        (unless competitive-companion--original-test-count
+          (setq-local competitive-companion--test-count original-test-count)
+          (setq-local competitive-companion--original-test-count competitive-companion--test-count))
+
         (magit-insert-section (competitive-companion-root-section)
           (magit-insert-heading (format "Failed Test Results: (%s)" task))
           (insert "\n")
@@ -257,6 +316,7 @@ Reports success if all tests pass, or failure otherwise."
                       (magit-insert-section (competitive-companion-actual-section)
                         (magit-insert-heading "Actual Output")
                         (insert (format "%s\n" (concat (caddr actual-output))))))))))))
+        (goto-char (point-min))
         (if all-success
             (if empty-stderr
                 (message "All tests passed!")
@@ -274,6 +334,36 @@ Reports success if all tests pass, or failure otherwise."
     (if file
         (find-file file)
       (message "No file associated with this section."))))
+
+(defun competitive-companion--remove-test-section-files ()
+  "Remove the files associated with the current section."
+  (interactive)
+  (unless competitive-companion--original-test-count
+    (error "`competitive-companion--original-test-count' is not set! Cannot remove test case!"))
+  (let ((index
+         (magit-section-value-if 'competitive-companion-test-section)))
+    (if (and index
+             (<= (string-to-number index) competitive-companion--original-test-count))
+        (message "This is an original test case! You should not remove it ;)")
+      (let ((default-directory competitive-companion--current-task))
+        (delete-file (expand-file-name (format "input%s.txt" index)))
+        (delete-file (expand-file-name (format "output%s.txt" index))))
+      (revert-buffer))))
+
+(defun competitive-companion--add-test-case ()
+  "Add test case to current output buffer task."
+  (interactive)
+  ;; TODO: remove this, it is here for testing porpuses
+  (unless competitive-companion--test-count
+    (error "`competitive-companion--test-count' is not set! Cannot add test case!"))
+  (setq-local competitive-companion--test-count (+ 1 competitive-companion--test-count))
+  (when (and competitive-companion--test-count
+             competitive-companion--current-task)
+    (let ((input-file (expand-file-name (format "input%d.txt" competitive-companion--test-count) competitive-companion--current-task))
+          (output-file (expand-file-name (format "output%d.txt" competitive-companion--test-count) competitive-companion--current-task)))
+      (write-region "" nil input-file)
+      (write-region "" nil output-file)
+      (revert-buffer))))
 
 ;;;; Functions
 
@@ -364,7 +454,8 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
           (insert-file-contents competitive-companion-task-template-file))))
     (with-current-buffer (find-file-noselect task-filename)
       (funcall competitive-companion-task-major-mode)
-      (setq-local competitive-companion--current-task temp-dir))
+      (setq-local competitive-companion--current-task temp-dir)
+      (setq-local competitive-companion--original-test-count (length tests)))
     (message "Problem '%s' (%s) fetched and saved to %s" name group task-filename)))
 
 (defun competitive-companion--write-test-cases (directory test-cases)
