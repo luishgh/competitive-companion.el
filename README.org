@@ -9,15 +9,13 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 - Automatically download all task's sample test cases.
 - Generate task's implementation file with user's template.
 - Run program against all test cases, see wrong answers in pop-up (help) buffer.
+- Support to multiple programming languages.
 
 ** Planned features
 
 - [ ] Support more verdicts (TLE, MLE, RTE).
-- [ ] Add/edit/run test cases directly in a dedicates test cases buffer.
+- [ ] Add/edit/run test cases directly in a dedicated test cases buffer.
 - [ ] Automatic submission (offload to another software most probably)
-- [ ] Customization of supported languages.
-- [ ] Choosing the implementation language.
-- [ ] Commands for creating contest folder, changing contests, etc.
 
 ** Non planned features
 
@@ -57,6 +55,7 @@ Add this to =$DOOMDIR/packages.el=:
    - ~competitive-companion-task-major-mode~ :: major mode used by task implementations, this is used to automatically determine its extension.
    - ~competitive-companion-task-template-file~ :: the user's template file, this is automatically inserted in generated task files.
 4. Change the binding of ~competitive-companion-run-tests~ if the default, =C-c .=, doesn't suit you.
+5. Check the [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Customization-Groups.html][customization group]] ~competitive-companion~ for more options!
 
 
 *** During contest
@@ -68,8 +67,8 @@ Add this to =$DOOMDIR/packages.el=:
 5. After compiling your program, run it against all test cases with ~competitive-companion-run-tests~. The outputs buffer uses ~magit-section~, the library that implements the togglable sections of [[https://magit.vc/][Magit]], which means all the bindings you would typically expect on such an interface works! (*Tip*: check all the enabled bindings with =C-h m=)
 6. Get that AC!
 
-*** Observations
+*** Important Observations
 
 - You need to run ~competitive-companion-run-tests~ while inside the task implementation file's buffer. This helps ~competitive-companion.el~ determine which test cases it should run. You can, however, have multiple binaries (one standard and one compiled with a stress test flag, for example) for the same task and choose which one to run against the test cases.
 - You *should not kill a task implementation file's buffer during the contest*. As said above, the package uses buffer local variables to associate a programming file with its test cases directory. If you kill the task buffer after loading its cases, you'll have to use the browser extension to load them again. Your implementation file will be preserved, as is explained below.
-- If a file with task's letter (in capital case) already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases, opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
+- If a file with the automatically generated filename already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases, opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
