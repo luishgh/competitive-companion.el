@@ -283,7 +283,7 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
             (let* ((match-input (file-name-nondirectory input-file))
                    (_ (string-match "[0-9]+" match-input))
                    (index (match-string 0 match-input))
-                   (output-file (format "output%s.txt" index))
+                   (output-file (expand-file-name (format "output%s.txt" index)))
                    (actual-output (competitive-companion--run-program command input-file))
                    (input-text (with-temp-buffer
                                  (insert-file-contents input-file)
