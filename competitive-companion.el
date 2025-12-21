@@ -135,6 +135,21 @@ This is to enable setting it as a directory local variable consistently."
   :type 'boolean
   :group 'competitive-companion)
 
+;; TODO: Decide a better name? This function generates the task filename based on the problem
+;; name (the field from Competitive Companion's JSON)
+;; TODO: We should allow this function to use the problem's GROUP, as this permits a more flexible behaviour which has access to current OJ
+(defcustom competitive-companion-task-filename-generator
+  (lambda (name)
+    (when (string-match "\\`[[:alnum:]]+" name)
+      (downcase (match-string 0 name))))
+  "Function that generates the task filename, receives problem's NAME (Competitive Companion field).
+The default behaviour extracts the first alphanumerical characters from NAME and use them, lowercased, as filenames.
+This behaviour works on Codeforces and AtCoder, it is recommended to try it for yourself
+and customize this (possibly on a dir local basis) for other judges.
+Unfornunately, an everywhere works, sensible solution seems impossible."
+  :type 'function
+  :group 'competitive-companion)
+
 ;;;; Commands
 
 ;;;###autoload
@@ -298,9 +313,10 @@ If a server is already running, fails silently."
 (defun competitive-companion--task-filename (name)
   "Return the filename used for task named `NAME'.
 
-If `competitive-companion-prompt-task-filename' is non-nil, prompt for
-the filename.  Otherwise, generate it automatically based on `NAME'."
-  (let ((default-filename (concat (substring name 0 1)
+If `competitive-companion-prompt-task-filename' is non-nil,
+prompt for the filename.  Otherwise, generate it automatically passing
+`NAME' to `competitive-companion-task-filename-generator'."
+  (let ((default-filename (concat (funcall competitive-companion-task-filename-generator name)
                                   (competitive-companion--default-task-extension))))
     (if competitive-companion--prompt-task-filename
         (read-file-name "Task file: " competitive-companion--contest-directory
@@ -313,6 +329,7 @@ Uses NAME as problem's name, GROUP as the contest's name,
 and the others (URL, MEMORY-LIMIT and TIME-LIMIT) have self explanatory names.
 MEMORY-LIMIT is in MBs and TIME-LIMIT in ms."
   (when competitive-companion-insert-header
+    (funcall competitive-companion-task-major-mode)
     (unless comment-start
       (error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
     (let ((start (point)))
@@ -325,7 +342,6 @@ Time Limit: %s ms
 Powered by competitive-companion.el (https://github.com/luishgh/competitive-companion.el)
 
 " name group url memory-limit time-limit))
-      (funcall competitive-companion-task-major-mode)
       (comment-region start (point)))))
 
 (defun competitive-companion--process-data (data)
