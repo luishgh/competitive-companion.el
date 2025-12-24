@@ -21,6 +21,7 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 
 - Compilation :: Emacs has a bunch of solutions for compilation already (~M-x compile~ for example)
 - Complex templating :: Use specific templating solutions for that.
+- Input/Output from files or command line arguments :: This rarely appears in online contests and seems too hard to be justifiable 🫤. Just test the program reading from stdin and outputting to stdout and change the IO wiring before submitting.
 - Mouse friendly interface :: Why reach for the mouse during a contest? 🤨
 
 ** Installation
