@@ -35,6 +35,7 @@
 (require 'cl-lib)
 (require 'json)
 (require 'server)
+(require 'magit-section)
 
 ;;;; Variables
 
@@ -160,6 +161,18 @@ This is to enable setting it as a directory local variable consistently."
   :type 'boolean
   :group 'competitive-companion)
 
+(defcustom competitive-companion-guess-program
+  (lambda (filename)
+    (let ((guess (file-name-sans-extension filename)))
+      (when (file-regular-p guess)
+        guess)))
+  "Function that guesses the program's name based on FILENAME.
+NOTE: the function should always check if the guessed path exists
+before returning.
+Set this to a function that always returns nil if you don't want any guessing."
+  :type 'function
+  :group 'competitive-companion)
+
 ;; TODO: Decide a better name? This function generates the task filename based on the problem
 ;; name (the field from Competitive Companion's JSON)
 ;; TODO: We should allow this function to use the problem's GROUP, as this permits a more flexible behaviour which has access to current OJ
@@ -207,18 +220,19 @@ the contest's dedicated folder."
     (competitive-companion--kill-buffers)
     (message "Competitive Companion mode deactivated.")))
 
-(define-derived-mode competitive-companion-output-mode magit-section-mode "Competitive Companion Output"
+(define-derived-mode competitive-companion-output-mode
+  magit-section-mode
+  "Competitive Companion Output"
   :interactive nil
   (setq-local revert-buffer-function #'competitive-companion-output-revert))
 
 ;; TODO: rework those classes, they don't work exactly as
 ;; intended. Only the keymap field is used, the file is recovered by
 ;; the value field
-(require 'magit-section)
 
 (defclass competitive-companion-root-section (magit-section) ())
 (defclass competitive-companion-test-section (magit-section)
-  ((test-index :initarg :test-index  :type string :documentation "Index of the test case.")
+  ((test-index :initarg :test-index :type string :documentation "Index of the test case.")
    (keymap :initform 'competitive-companion-test-section-map)))
 
 (defclass competitive-companion-input-section (magit-section)
@@ -238,21 +252,91 @@ the contest's dedicated folder."
     (error "`competitive-companion--current-command' is not set! Cannot revert output buffer!"))
   (competitive-companion-run-tests competitive-companion--current-command (current-buffer)))
 
+;; TODO: would be cool for this to close the current window
+;; if current buffer is a competitive-companion-output buffer
+(defun competitive-companion-toggle-output-buffer ()
+  "Toggle the output buffer for the current Competitive Companion task.
+
+If the output buffer does not exist or is dead, tries
+to run `competitive-companion-run-tests'.
+
+If the output buffer is visible, select its window.
+If it is alive but not visible, display it and select its window."
+  (interactive)
+
+  (unless (buffer-file-name)
+    (user-error "Current buffer is not visiting a file"))
+
+  ;; Guard: minor mode
+  (unless (bound-and-true-p competitive-companion-mode)
+    (user-error "Competitive Companion mode is not enabled"))
+
+  ;; Guard: current task
+  (unless competitive-companion--current-task
+    (user-error "No current Competitive Companion task"))
+
+  ;; Ensure output buffer exists
+  (if (and competitive-companion--output-buffer
+           (buffer-live-p competitive-companion--output-buffer))
+      (let ((buf competitive-companion--output-buffer))
+        (cond
+         ;; Visible: select window
+         ((get-buffer-window buf 'visible)
+          (select-window (get-buffer-window buf 'visible)))
+
+         ;; Alive but not visible: display and select
+         ((buffer-live-p buf)
+          (pop-to-buffer buf))
+
+         ;; Defensive fallback
+         (t
+          (error "Output buffer is not available"))))
+    (let* ((file (buffer-file-name))
+           (program
+            (progn
+              (unless file
+                (error "Current buffer is not visiting a file"))
+              (funcall competitive-companion-guess-program file)))
+
+           (keys (where-is-internal #'competitive-companion-run-tests nil t))
+           (key-desc (when keys (key-description keys))))
+      (unless program
+        (user-error "This task has not been run before! Try '%s'"
+                    (if key-desc
+                        key-desc
+                      "`competitive-companion-run-tests'")))
+
+      (setq-local competitive-companion--output-buffer
+                  (generate-new-buffer "*competitive-companion-output*"))
+      (competitive-companion-run-tests program competitive-companion--output-buffer))))
+
 (defun competitive-companion-run-tests (command output-buffer)
   "Run all test cases for current task using `COMMAND'.
 Reports success if all tests pass,
-show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
+show failed test cases outputs on `OUTPUT-BUFFER' otherwise.
+Pass nil on second argument to signal it should create a new one."
   (interactive (progn
+                 (unless (buffer-file-name)
+                   (user-error "Current buffer is not visiting a file"))
                  (unless competitive-companion-mode
-                   (error "Competitive Companion mode is not turned on"))
+                   (user-error "Competitive Companion mode is not turned on"))
                  (unless competitive-companion--current-task
-                   (error "The current task has not been fetched"))
+                   (user-error "The current task has not been fetched"))
                  (list (expand-file-name
-                        (read-shell-command "Command to run: " competitive-companion--contest-directory))
+                        (read-file-name
+                         "Command to run: "
+                         competitive-companion--contest-directory nil t
+                         (if competitive-companion--current-command
+                             (file-name-nondirectory competitive-companion--current-command)
+                           (when-let* ((guess (funcall competitive-companion-guess-program (buffer-file-name))))
+                             (file-name-nondirectory guess)))))
                        (if (buffer-live-p competitive-companion--output-buffer)
                            competitive-companion--output-buffer
                          (setq-local competitive-companion--output-buffer (generate-new-buffer "*competitive-companion-output*"))
                          competitive-companion--output-buffer))))
+
+  (unless (file-regular-p command)
+    (user-error "'%s' is not a regular file!" command))
 
   (let* ((task-directory competitive-companion--current-task)
          (default-directory task-directory)
@@ -260,10 +344,37 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
          (task (if competitive-companion--current-task-name
                    competitive-companion--current-task-name
                  (substring task-hashname 0 1)))
-         (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
          (original-test-count competitive-companion--original-test-count)
-         (all-success t)
+         (test-results (competitive-companion--run-test-cases command task-directory))
+         (failed-test-results
+          (seq-sort
+           (lambda (result-a result-b)
+             (< (competitive-companion-test-result-index result-a) (competitive-companion-test-result-index result-b)))
+           (seq-filter
+            (lambda (test-result)
+              (not (equal (competitive-companion-test-result-verdict test-result)
+                          'ac)))
+            test-results)))
+         (accepted-test-results
+          (seq-sort
+           (lambda (result-a result-b)
+             (< (competitive-companion-test-result-index result-a) (competitive-companion-test-result-index result-b)))
+           (seq-filter
+            (lambda (test-result)
+              (equal (competitive-companion-test-result-verdict test-result)
+                     'ac))
+            test-results)))
+         (all-success (null failed-test-results))
          (empty-stderr t))
+
+    ;; We first check if there was any output to stderr:
+    (dolist (test-result test-results)
+      (unless (or (null (competitive-companion-test-result-stderr test-result))
+                  (string-empty-p (competitive-companion-test-result-stderr test-result)))
+        (setq empty-stderr nil)))
+
+    ;; NOTE: Currently we only displayed failed results, maybe this should be user defined
+    ;; I do think failed tests should come first nonetheless
     (with-current-buffer output-buffer
       (let ((inhibit-read-only t)
             (default-directory task-directory))
@@ -285,44 +396,36 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
         (magit-insert-section (competitive-companion-root-section)
           (magit-insert-heading (format "Failed Test Results: (%s)" task))
           (insert "\n")
-          (dolist (input-file test-files)
-            (let* ((match-input (file-name-nondirectory input-file))
-                   (_ (string-match "[0-9]+" match-input))
-                   (index (match-string 0 match-input))
-                   (output-file (expand-file-name (format "output%s.txt" index)))
-                   (actual-output (competitive-companion--run-program command input-file))
-                   (input-text (with-temp-buffer
-                                 (insert-file-contents input-file)
-                                 (buffer-string)))
-                   (expected-output (with-temp-buffer
-                                      (insert-file-contents output-file)
-                                      (buffer-string))))
-              (progn
-                (unless (string-empty-p (cadr actual-output))
-                  (setq empty-stderr nil))
-                (unless (string= (car actual-output) expected-output)
-                  (setq all-success nil)
-                  (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
-                                        (magit-insert-heading (propertize (format "Test %s " index) 'font-lock-face 'magit-section-heading)
-                                          (propertize " WA " 'font-lock-face (competitive-companion--result-face 'wa)))
-                    (magit-insert-section (competitive-companion-input-section input-file)
-                      (magit-insert-heading "Input")
-                      (insert (format "%s\n" input-text)))
-                    (magit-insert-section (competitive-companion-expected-section output-file)
-                      (magit-insert-heading "Expected Output")
-                      (insert (format "%s\n" expected-output)))
-                    (if (and competitive-companion-separate-stderr
-                             (not (string-empty-p (cadr actual-output))))
-                        (progn
-                          (magit-insert-section (competitive-companion-actual-section)
-                            (magit-insert-heading "Actual Output")
-                            (insert (format "%s\n" (car actual-output))))
-                          (magit-insert-section (competitive-companion-actual-section)
-                            (magit-insert-heading "Actual Output [stderr]")
-                            (insert (format "%s\n" (cadr actual-output)))))
+          (dolist (test-result failed-test-results)
+            (let ((index (competitive-companion-test-result-index test-result))
+                  (input-text (competitive-companion-test-result-input test-result))
+                  (expected-output (competitive-companion-test-result-expected test-result))
+                  (verdict (competitive-companion-test-result-verdict test-result))
+                  (stdout (competitive-companion-test-result-stdout test-result))
+                  (stderr (competitive-companion-test-result-stderr test-result))
+                  (input-file (competitive-companion-test-result-input-file test-result))
+                  (output-file (competitive-companion-test-result-output-file test-result)))
+              (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
+                (magit-insert-heading (propertize (format "Test %s " index) 'font-lock-face 'magit-section-heading)
+                  (competitive-companion--verdict-string verdict))
+                (magit-insert-section (competitive-companion-input-section input-file)
+                  (magit-insert-heading "Input")
+                  (insert (format "%s\n" input-text)))
+                (magit-insert-section (competitive-companion-expected-section output-file)
+                  (magit-insert-heading "Expected Output")
+                  (insert (format "%s\n" expected-output)))
+                (if (and competitive-companion-separate-stderr
+                         (not (string-empty-p stderr)))
+                    (progn
                       (magit-insert-section (competitive-companion-actual-section)
                         (magit-insert-heading "Actual Output")
-                        (insert (format "%s\n" (concat (caddr actual-output))))))))))))
+                        (insert (format "%s\n" stdout)))
+                      (magit-insert-section (competitive-companion-actual-section)
+                        (magit-insert-heading "Actual Output [stderr]")
+                        (insert (format "%s\n" stderr))))
+                  (magit-insert-section (competitive-companion-actual-section)
+                    (magit-insert-heading "Actual Output")
+                    (insert (format "%s\n" stdout))))))))
         (goto-char (point-min))
         (if all-success
             (if empty-stderr
@@ -350,7 +453,7 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
   (let ((index
          (magit-section-value-if 'competitive-companion-test-section)))
     (if (and index
-             (<= (string-to-number index) competitive-companion--original-test-count))
+             (<= index competitive-companion--original-test-count))
         (message "This is an original test case! You should not remove it ;)")
       (let ((default-directory competitive-companion--current-task))
         (delete-file (expand-file-name (format "input%s.txt" index)))
@@ -371,6 +474,21 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
       (write-region "" nil input-file)
       (write-region "" nil output-file)
       (revert-buffer))))
+
+;;;; Structs
+
+(cl-defstruct competitive-companion-test-result
+  index
+  verdict ;; one of: 'ac 'wa 'tle 'mle 'rte
+  time-ms
+  memory-kb
+  input
+  stdout ;; contains stderr as well if `competitive-companion-separate-stderr' is nil
+  stderr
+  expected
+  ;; file metadata for sections
+  input-file
+  output-file)
 
 ;;;; Functions
 
@@ -424,11 +542,13 @@ prompt for the filename.  Otherwise, generate it automatically passing
   "Insert the package's header on current buffer.
 Uses NAME as problem's name, GROUP as the contest's name,
 and the others (URL, MEMORY-LIMIT and TIME-LIMIT) have self explanatory names.
-MEMORY-LIMIT is in MBs and TIME-LIMIT in ms."
+MEMORY-LIMIT is in MBs and TIME-LIMIT in ms.
+
+If `competitive-companion-insert-header' is non-nil, this becomes a no-op."
   (when competitive-companion-insert-header
     (funcall competitive-companion-task-major-mode)
     (unless comment-start
-      (error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
+      (user-error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
     (let ((start (point)))
       (insert (format "Problem: '%s'
 Contest: '%s'
@@ -482,48 +602,155 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
       (when (and buffer-name (string-prefix-p "*competitive-companion" buffer-name))
         (kill-buffer buffer)))))
 
-;; TODO: this should return the status of the test case, ie AC, WA, TLE, etc.
-;; Currently, this is checked on the UI code.
-(defun competitive-companion--run-program (command input-file)
-  "Run COMMAND with INPUT-FILE as input.
+(defun competitive-companion--run-test-cases (command task-directory)
+  "Run COMMAND against all test cases in TASK-DIRECTORY.
 
-Trims trailing whitespace from each line of stdout.  Returns a list
-containing three strings (stdout, stderr and both together)."
-  (let ((out-buffer (generate-new-buffer " *cc-out*"))
+Returns a list of `cc-test-result'.
+The order of results is not guaranteed."
+
+  (let* ((default-directory task-directory)
+         (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
+         (test-results (list)))
+    (dolist (input-file test-files test-results)
+      (let* ((match-input (file-name-nondirectory input-file))
+             (_ (string-match "[0-9]+" match-input))
+             (index (string-to-number (match-string 0 match-input)))
+             (output-file (expand-file-name (format "output%d.txt" index))))
+        (push (competitive-companion--run-program command index input-file output-file) test-results)))))
+
+(defun competitive-companion--run-program (command index input-file output-file)
+  "Run COMMAND with INPUT-FILE as input and return a test-result record.
+
+INDEX should be the number identifing the test case and EXPECTED-OUTPUT
+will be used to decide verdict."
+  (let ((expected-output (with-temp-buffer
+                           (insert-file-contents output-file)
+                           (buffer-string)))
+        (out-buffer (generate-new-buffer " *cc-out*"))
         (stdout-buffer (generate-new-buffer " *cc-stdout*"))
-        (stderr-file (make-temp-file "cc-stderr-")))
+        (stderr-file (make-temp-file "cc-stderr-"))
+        (input-text (with-temp-buffer
+                      (insert-file-contents input-file)
+                      (buffer-string)))
+        (stdout-value nil)
+        (separate-stdout nil)
+        (stderr-value nil)
+        (return-value nil))
     (unwind-protect
         (progn
+          ;; NOTE: We run the program one additional time just to get joined outputs,
+          ;; because we always use separate stdout for deciding verdict.
+          ;; Is there a way to get both joined outputs and only considering stdout on verdict with only one execution?
+          (unless competitive-companion-separate-stderr
+            (call-process command input-file (list out-buffer t))
+            (let* ((out (with-current-buffer out-buffer
+                          (split-string (buffer-string) "\n" t "[ \t\r]+")))
+                   (joined-out (concat (string-join out "\n") "\n")))
+              (setq stdout-value joined-out)))
+          (progn
+            ;; Call the command, redirecting stdout to buffer, stderr to file
+            (setq return-value (call-process command input-file (list stdout-buffer stderr-file)))
 
-          (call-process command input-file (list out-buffer t))
 
-          ;; Call the command, redirecting stdout to buffer, stderr to file
-          (call-process command input-file (list stdout-buffer stderr-file))
+            ;; Process stdout (this already trims whitespaces)
+            (let* ((stdout (with-current-buffer stdout-buffer
+                             (split-string (buffer-string) "\n" t "[ \t\r]+")))
+                   (joined-stdout (concat (string-join stdout "\n") "\n"))
+                   (stderr (with-temp-buffer
+                             (insert-file-contents stderr-file)
+                             (buffer-string))))
+              (setq separate-stdout joined-stdout)
+              (when competitive-companion-separate-stderr
+                (setq stdout-value joined-stdout))
 
-          ;; Process stdout
-          (let* ((out (with-current-buffer out-buffer
-                           (split-string (buffer-string) "\n" t "[ \t\r]+")))
-                 (stdout (with-current-buffer stdout-buffer
-                           (split-string (buffer-string) "\n" t "[ \t\r]+")))
-                 (joined-stdout (concat (string-join stdout "\n") "\n"))
-                 (joined-out (concat (string-join out "\n") "\n"))
-                 (stderr (with-temp-buffer
-                           (insert-file-contents stderr-file)
-                           (buffer-string))))
-            (list joined-stdout stderr joined-out)))
+              (setq stderr-value stderr))))
       ;; Cleanup
       (kill-buffer stdout-buffer)
-      (delete-file stderr-file))))
+      (delete-file stderr-file))
 
-;; TODO: use custom faces, similar to forge-topic-label
-(defun competitive-companion--result-face (result)
-  "Decide face based on test case RESULT, used on the test-section."
-  (pcase result
-    ('wa 'error)
-    ('tle 'warning)
-    ('mle 'compilation-error)
-    ('ac 'success)
-    (_ 'default)))
+    ;; First, we check if there was a error
+    (if (not (equal return-value 0))
+        (if (stringp return-value)
+            ;; process terminated with a signal
+            ;; this tipically indicates a runtime error or a false assertion
+            ;; for now, we just consider an RTE, but it would be nice to get better diagnostics if possible
+            (make-competitive-companion-test-result
+             :index index
+             :input input-text
+             :stdout stdout-value
+             :stderr stderr-value
+             :expected expected-output
+             :input-file input-file
+             :output-file output-file
+             :verdict 'rte)
+          ;; exit status is a number, program got RTE
+          (make-competitive-companion-test-result
+           :index index
+           :input input-text
+           :stdout stdout-value
+           :stderr stderr-value
+           :expected expected-output
+           :input-file input-file
+           :output-file output-file
+           :verdict 'rte))
+      ;; Now we check the output, using the separate stdout
+      (if (not (string= separate-stdout expected-output))
+          (make-competitive-companion-test-result
+           :index index
+           :input input-text
+           :stdout stdout-value
+           :stderr stderr-value
+           :expected expected-output
+           :input-file input-file
+           :output-file output-file
+           :verdict 'wa)
+        ;; NOTE: For now, we don't check memory or time limits, so we conclude test got AC
+        (make-competitive-companion-test-result
+         :index index
+         :input input-text
+         :stdout stdout-value
+         :stderr stderr-value
+         :expected expected-output
+         :input-file input-file
+         :output-file output-file
+         :verdict 'ac)))))
 
+(defun competitive-companion--verdict-string (verdict)
+  "Get VERDICT identifying string.
+Returns a string propertized with a semantic font-locking."
+  (pcase verdict
+    ('wa (propertize " WA " 'font-lock-face 'competitive-companion-verdict-wa))
+    ('tle (propertize " TLE " 'font-lock-face 'competitive-companion-verdict-tle))
+    ('rte (propertize " RTE " 'font-lock-face 'competitive-companion-verdict-rte))
+    ('ac (propertize " AC " 'font-lock-face 'competitive-companion-verdict-ac))
+    (_ (error "Competitive Companion: not recognized verdict: %s" verdict))))
+
+;;;; Faces
+
+(defface competitive-companion-verdict-wa
+  '((t :inherit error))
+  "Face for the WA text in output buffer."
+  :group 'competitive-companion)
+
+(defface competitive-companion-verdict-tle
+  '((t :inherit warning))
+  "Face for the TLE text in output buffer."
+  :group 'competitive-companion)
+
+(defface competitive-companion-verdict-rte
+  '((t :inherit warning))
+  "Face for the RTE text in output buffer."
+  :group 'competitive-companion)
+
+(defface competitive-companion-verdict-ac
+  '((t :inherit success))
+  "Face for the AC text in output buffer."
+  :group 'competitive-companion)
+
+;;; _
+;; Local Variables:
+;; read-symbol-shorthands: (
+;;   ("cc-"       . "competitive-companion-"))
+;; End:
 (provide 'competitive-companion)
 ;;; competitive-companion.el ends here
