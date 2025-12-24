@@ -41,6 +41,9 @@
 (defvar-local competitive-companion--current-task nil
   "Holds the current task's (i.e. problem), associated with its data dir.")
 
+(defvar-local competitive-companion--current-task-name nil
+  "Holds the current task's (i.e. problem) name.")
+
 (defvar-local competitive-companion--test-count nil
   "Holds the number of test cases for output buffer's task.")
 
@@ -131,7 +134,7 @@ always preceded by a dot."
   :type '(list (cons symbol string))
   :group 'competitive-companion)
 
-(defcustom competitive-companion-collapse-test-cases 't
+(defcustom competitive-companion-collapse-test-cases t
   "Controls whether test cases in the output buffer should be initially collapsed.
 
 If it is set to nil, all test cases are initially
@@ -254,7 +257,9 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
   (let* ((task-directory competitive-companion--current-task)
          (default-directory task-directory)
          (task-hashname (file-name-nondirectory task-directory)) ;; FIXME: better name or kill buffer if present
-         (task (substring task-hashname 0 1))
+         (task (if competitive-companion--current-task-name
+                   competitive-companion--current-task-name
+                 (substring task-hashname 0 1)))
          (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
          (original-test-count competitive-companion--original-test-count)
          (all-success t)
@@ -272,6 +277,7 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
         ;; save some metadata on output buffer:
         (setq-local competitive-companion--current-task task-directory)
         (setq-local competitive-companion--current-command command)
+        (setq-local competitive-companion--current-task-name task)
         (unless competitive-companion--original-test-count
           (setq-local competitive-companion--test-count original-test-count)
           (setq-local competitive-companion--original-test-count competitive-companion--test-count))
@@ -297,7 +303,8 @@ show failed test cases outputs on `OUTPUT-BUFFER' otherwise."
                 (unless (string= (car actual-output) expected-output)
                   (setq all-success nil)
                   (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
-                    (magit-insert-heading (format "Test %s" index))
+                                        (magit-insert-heading (propertize (format "Test %s " index) 'font-lock-face 'magit-section-heading)
+                                          (propertize " WA " 'font-lock-face (competitive-companion--result-face 'wa)))
                     (magit-insert-section (competitive-companion-input-section input-file)
                       (magit-insert-heading "Input")
                       (insert (format "%s\n" input-text)))
@@ -455,6 +462,7 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
     (with-current-buffer (find-file-noselect task-filename)
       (funcall competitive-companion-task-major-mode)
       (setq-local competitive-companion--current-task temp-dir)
+      (setq-local competitive-companion--current-task-name name)
       (setq-local competitive-companion--original-test-count (length tests)))
     (message "Problem '%s' (%s) fetched and saved to %s" name group task-filename)))
 
@@ -474,6 +482,8 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
       (when (and buffer-name (string-prefix-p "*competitive-companion" buffer-name))
         (kill-buffer buffer)))))
 
+;; TODO: this should return the status of the test case, ie AC, WA, TLE, etc.
+;; Currently, this is checked on the UI code.
 (defun competitive-companion--run-program (command input-file)
   "Run COMMAND with INPUT-FILE as input.
 
@@ -504,6 +514,16 @@ containing three strings (stdout, stderr and both together)."
       ;; Cleanup
       (kill-buffer stdout-buffer)
       (delete-file stderr-file))))
+
+;; TODO: use custom faces, similar to forge-topic-label
+(defun competitive-companion--result-face (result)
+  "Decide face based on test case RESULT, used on the test-section."
+  (pcase result
+    ('wa 'error)
+    ('tle 'warning)
+    ('mle 'compilation-error)
+    ('ac 'success)
+    (_ 'default)))
 
 (provide 'competitive-companion)
 ;;; competitive-companion.el ends here
