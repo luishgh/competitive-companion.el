@@ -612,7 +612,8 @@ The order of results is not guaranteed."
   (let* ((default-directory task-directory)
          (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
          (test-results (list)))
-    (dolist (input-file test-files test-results)
+    (dolist-with-progress-reporter (input-file test-files test-results)
+        "Running test cases..."
       (let* ((match-input (file-name-nondirectory input-file))
              (_ (string-match "[0-9]+" match-input))
              (index (string-to-number (match-string 0 match-input)))
