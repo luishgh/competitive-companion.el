@@ -100,6 +100,8 @@
 
 (defcustom competitive-companion-task-major-mode 'c++-mode
   "Major mode for task's implementation file.
+This value should be one of the mode names present in
+`competitive-companion-languages'.
 Make sure the mode defines comment syntax!"
   :type 'symbol
   :group 'competitive-companion)
@@ -111,7 +113,7 @@ If file is non-empty, its contents will be inserted verbatim below
 the task file header.
 
 If the user prefers using proper templating packages for this,
-this variable should point to a non existing file."
+this variable should be set to nil."
   :type 'file
   :group 'competitive-companion)
 
@@ -301,8 +303,9 @@ If it is alive but not visible, display it and select its window."
 
            (keys (where-is-internal #'competitive-companion-run-tests nil t))
            (key-desc (when keys (key-description keys))))
-      (unless program
-        (user-error "This task has not been run before! Try '%s'"
+      (unless (and program
+                   (file-regular-p program))
+        (user-error "This task has not been run before! Try `%s'"
                     (if key-desc
                         key-desc
                       "`competitive-companion-run-tests'")))
@@ -337,11 +340,11 @@ Pass nil on second argument to signal it should create a new one."
                          competitive-companion--output-buffer))))
 
   (unless (file-regular-p command)
-    (user-error "'%s' is not a regular file!" command))
+    (user-error "`%s' is not a regular file!" command))
 
   (let* ((task-directory competitive-companion--current-task)
          (default-directory task-directory)
-         (task-hashname (file-name-nondirectory task-directory)) ;; FIXME: better name or kill buffer if present
+         (task-hashname (file-name-nondirectory task-directory))
          (task (if competitive-companion--current-task-name
                    competitive-companion--current-task-name
                  (substring task-hashname 0 1)))
@@ -449,32 +452,31 @@ Pass nil on second argument to signal it should create a new one."
 (defun competitive-companion--remove-test-section-files ()
   "Remove the files associated with the current section."
   (interactive)
-  (unless competitive-companion--original-test-count
-    (error "`competitive-companion--original-test-count' is not set! Cannot remove test case!"))
   (let ((index
          (magit-section-value-if 'competitive-companion-test-section)))
-    (if (and index
-             (<= index competitive-companion--original-test-count))
-        (message "This is an original test case! You should not remove it ;)")
-      (let ((default-directory competitive-companion--current-task))
-        (delete-file (expand-file-name (format "input%s.txt" index)))
-        (delete-file (expand-file-name (format "output%s.txt" index))))
-      (revert-buffer))))
+    (when index
+      (unless competitive-companion--original-test-count
+        (error "`competitive-companion--original-test-count' is not set! Cannot remove test case!"))
+      (if (<= index competitive-companion--original-test-count)
+          (message "This is an original test case! You should not remove it ;)")
+        (let ((default-directory competitive-companion--current-task))
+          (delete-file (expand-file-name (format "input%s.txt" index)))
+          (delete-file (expand-file-name (format "output%s.txt" index))))
+        (revert-buffer)))))
 
 (defun competitive-companion--add-test-case ()
   "Add test case to current output buffer task."
   (interactive)
-  ;; TODO: remove this, it is here for testing porpuses
   (unless competitive-companion--test-count
     (error "`competitive-companion--test-count' is not set! Cannot add test case!"))
+  (unless competitive-companion--current-task
+    (error "`competitive-companion--current-task' is not set! Cannot add test case!"))
   (setq-local competitive-companion--test-count (+ 1 competitive-companion--test-count))
-  (when (and competitive-companion--test-count
-             competitive-companion--current-task)
-    (let ((input-file (expand-file-name (format "input%d.txt" competitive-companion--test-count) competitive-companion--current-task))
-          (output-file (expand-file-name (format "output%d.txt" competitive-companion--test-count) competitive-companion--current-task)))
-      (write-region "" nil input-file)
-      (write-region "" nil output-file)
-      (revert-buffer))))
+  (let ((input-file (expand-file-name (format "input%d.txt" competitive-companion--test-count) competitive-companion--current-task))
+        (output-file (expand-file-name (format "output%d.txt" competitive-companion--test-count) competitive-companion--current-task)))
+    (write-region "" nil input-file)
+    (write-region "" nil output-file)
+    (revert-buffer)))
 
 ;;;; Structs
 
@@ -638,6 +640,18 @@ will be used to decide verdict."
         (separate-stdout nil)
         (stderr-value nil)
         (return-value nil))
+    ;; TODO: decide a custom verdict and/or implement more complex test case selection for showing on the output buffer
+    ;; Empty test cases should always show up in the outputs buffer
+    (unless (not (string-empty-p input-text))
+      (make-competitive-companion-test-result
+             :index index
+             :input input-text
+             :stdout stdout-value
+             :stderr stderr-value
+             :expected expected-output
+             :input-file input-file
+             :output-file output-file
+             :verdict 'wa))
     (unwind-protect
         (progn
           ;; NOTE: We run the program one additional time just to get joined outputs,
