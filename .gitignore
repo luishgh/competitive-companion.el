@@ -1,2 +1,3 @@
 # Ignore Emacs compiled Lisp files
 *.elc
+*.info
