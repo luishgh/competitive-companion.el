@@ -46,6 +46,18 @@ Add this to =$DOOMDIR/packages.el=:
                                      :repo "luishgh/competitive-companion.el"))
 #+end_src
 
+*** package-vc
+
+#+begin_src emacs-lisp
+  (package-vc-install
+   '(competitive-companion :url "https://github.com/luishgh/competitive-companion.el"
+                           :doc "doc/competitive-companion.texi"))
+#+end_src
+
 ** Documentation
 
-This package includes an Info manual! After installation, check it out with ~M-x info-display-manual RET competitive-companion~
+This package includes an Info manual! After installation, check it out with:
+
+#+begin_example
+M-x info-display-manual RET competitive-companion RET
+#+end_example

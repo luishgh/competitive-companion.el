@@ -8,7 +8,7 @@
 
 @copying
 @quotation
-Copyright (C) 2024-2025 Luis Higino <luis.higino@@dcc.ufmg.br>
+Copyright (C) 2024-2026 Luis Higino <luis.higino@@dcc.ufmg.br>
 
 You can redistribute this document and/or modify it under the terms
 of the GNU General Public License as published by the Free Software
@@ -44,7 +44,7 @@ General Public License for more details.
 @node Top
 @top Competitive Companion
 
-This plugin provides an Emacs interface to interact with the Competitive Companion browser extension. It also provides some commands to speed up the coding-compiling-test loop during online contests
+This package provides an Emacs integration to the Competitive Companion browser extension. It also provides some commands to speed up the coding-compiling-test loop during online contests.
 
 @insertcopying
 
@@ -61,11 +61,6 @@ This plugin provides an Emacs interface to interact with the Competitive Compani
 @detailmenu
 --- The Detailed Node Listing ---
 
-Installation
-
-* Doom Emacs::
-* use-package + straight.el: use-package + straightel. 
-
 Tutorial
 
 * Initial setup::
@@ -80,6 +75,8 @@ During a contest
 Customizing
 
 * Language/file options::
+* Output buffer options::
+* Server options::
 
 @end detailmenu
 @end menu
@@ -87,39 +84,14 @@ Customizing
 @node Introduction
 @chapter Introduction
 
-This plugin provides an Emacs interface to interact with the @uref{https://github.com/jmerle/competitive-companion, Competitive Companion browser extension}. It also provides some commands to speed up the coding-compiling-test loop during online contests.
+This package provides an Emacs integration to the @uref{https://github.com/jmerle/competitive-companion, Competitive Companion browser extension}. It also provides some commands to speed up the coding-compiling-test loop during online contests.
 
 The package is designed to be minimalistic and as non-intrusive as possible, while still providing some level of convenience. The idea is that during an online contest, you turn on the global minor mode. Then, when you read a problem with the browser extension, Emacs will automatically download the test cases to temporary files, without cluttering your folders, and generate an implementation file using your preferred language and template in the contest's folder. When you are done implementing the code and compiling it, the package provides an interactive command that runs the program against the downloaded test cases. Then, if all outputs matched, it just lets you know in the minibuffer. Otherwise, an special buffer pops up with only the failed test cases.
 
 @node Installation
 @chapter Installation
 
-This package is currently only available through the GitHub repository. Installation examples in some common settings are provided below.
-
-@menu
-* Doom Emacs::
-* use-package + straight.el: use-package + straightel. 
-@end menu
-
-@node Doom Emacs
-@section Doom Emacs
-
-Add this to @samp{$DOOMDIR/packages.el}:
-
-@lisp
-(package! competitive-companion
-  :recipe (:host github :repo "luishgh/competitive-companion.el"))
-@end lisp
-
-@node use-package + straightel
-@section use-package + straight.el
-
-@lisp
-(use-package competitive-companion
-  :straight (competitive-companion :type git
-                                   :host github
-                                   :repo "luishgh/competitive-companion.el"))
-@end lisp
+This package is currently only available through the GitHub repository. Check installation instructions @uref{https://github.com/luishgh/competitive-companion.el?tab=readme-ov-file#installation, there}.
 
 @node Tutorial
 @chapter Tutorial
@@ -133,11 +105,11 @@ Add this to @samp{$DOOMDIR/packages.el}:
 @node Initial setup
 @section Initial setup
 
-First, download the @uref{https://github.com/jmerle/competitive-companion, competitive companion browser extension} for your favorite (and supported) browser. The extension is the one responsible for reading the problem's information from the webpage.
+First, download the @uref{https://github.com/jmerle/competitive-companion, competitive companion browser extension} for your favorite (and supported) browser. The extension is the one responsible for reading the problem's information from the web-page.
 
-Now, we need to tell the extension and Emacs to communicate through the same port. For that, add the value of @code{competitive-companion-server-port} to @emph{Custom ports} in the extension's preference menu. Note you can alter the value of this custom variable if the default port is already being used by something else on your computer.
+Now, we need to tell the extension and Emacs to communicate through the same port. For that, add the value of @code{competitive-companion-server-port} to @strong{Custom ports} in the extension's preference menu. Note you can alter the value of this custom variable if the default port is already being used by something else on your computer.
 
-Now is the perfect time to take a look at the options in @ref{Customizing} to make sure the package behaves like you expect. If you don't want to dig the options just yet, please take a quick look at , as they are the ones that must be set correctly for the package to work.
+Now is the perfect time to take a look at the options in @ref{Customizing} to make sure the package behaves like you expect. If you don't want to dig into customization just yet, please take a quick look at the language/file options (@ref{Language/file options}), as they are the ones that must be set correctly for the package to work.
 
 @node During a contest
 @section During a contest
@@ -176,7 +148,7 @@ starts the connection with the browser extension and sets the contest's folder t
 @findex competitive-companion-run-tests
 @table @asis
 @item @code{competitive-companion-run-tests}
-prompts for a program to run against the test case of the current task. The program is run synchronously, so the feedback is showed as soon as your program finishes execution and you can cancel the execution with @code{C-g} if it hangs (which signals an infinite loop or @samp{TLE}). The default value for the prompt is either the last used program if that exists or is automatically generated by the lambda stored at @code{competitive-companion-task-filename-generator}. Customize this variable if the default behaviour does not suit you.
+prompts for a program to run against the test case of the current task. The program is run synchronously, so the feedback is showed as soon as your program finishes execution and you can abort the execution with @code{C-g} if it hangs (which probably signals an infinite loop or @samp{TLE}). The default value for the prompt is either the last used program if that exists or is automatically generated by the lambda stored at @code{competitive-companion-task-filename-generator}. Customize this variable if the default behaviour does not suit you.
 @end table
 
 @findex competitive-companion-toggle-output-buffer
@@ -195,6 +167,8 @@ You need to run @code{competitive-companion-run-tests} while inside the task imp
 You @strong{should not kill a task implementation file's buffer during the contest}. As said above, the package uses buffer local variables to associate a programming file with its test cases directory. If you kill the task buffer after loading its cases, you'll have to use the browser extension to load them again. Your implementation file will be preserved, as is explained below.
 @item
 If a file with the automatically generated filename already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases, opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
+@item
+The package considers only the stdout to check answers, so you don't need to worry about using stderr. Most judges do this as well, but debugging output can result in @samp{TLE}, thus @code{competitive-companion-run-tests} will let you know if all cases succeeded and stderr is being used.
 @end itemize
 
 @node Inside the outputs buffer
@@ -223,6 +197,8 @@ Note that it can be useful to set some of the options below with Directory Local
 
 @menu
 * Language/file options::
+* Output buffer options::
+* Server options::
 @end menu
 
 @node Language/file options
@@ -245,25 +221,59 @@ List of available languages to choose when fetching a new task. Each entry shoul
 @vindex competitive-companion-task-template-file
 @table @asis
 @item @code{competitive-companion-task-template-file}
-Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour
+Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour.
 @end table
 
 @vindex competitive-companion-prompt-task-filename
 @table @asis
 @item @code{competitive-companion-prompt-task-filename}
-If non-nil, prompt for a task filename instead of automatically generating one when a task is received from the browser extension. This option must be set @strong{BEFORE} turning on the mode and you need to restart the mode to toggle its value.
+If non-nil, prompt for a task filename instead of automatically generating one when a task is received from the browser extension. This option must be set @strong{BEFORE} turning on the mode and you need to restart the mode to toggle its value. This is particularly useful if generating an automatic name for an online judge is too difficult or you are doing problems from multiple sources on the same folder.
 @end table
 
 @vindex competitive-companion-task-filename-generator
 @table @asis
 @item @code{competitive-companion-task-filename-generator}
-Function that generates the task filename based on problem's @samp{NAME}. This is used if @code{competitive-companion-prompt-task-filename} is non-nil. The default behaviour is documented in the variable's docstring and just works on most major online judges, but is not guaranteed to work on all judges as this is essentially impossible.
+Function that generates the task filename based on problem's @samp{NAME}, i.e. the field received from the browser extension. This is used if @code{competitive-companion-prompt-task-filename} is non-nil. The default behaviour is documented in the variable's docstring and just works on most major online judges, but is not guaranteed to work on all judges as this is essentially impossible.
 @end table
 
 @vindex competitive-companion-insert-header
 @table @asis
 @item @code{competitive-companion-insert-header}
 This boolean option controls whether the package's header is inserted in automatically generated files. It contains basic information about the problem and shares the package's GitHub. Set to nil if this annoys you.
+@end table
+
+@vindex competitive-companion-guess-program
+@table @asis
+@item @code{competitive-companion-guess-program}
+Function that guesses the program's name based on task's file name. This is used as the default value for running commands on the first time they are called. Check the docstring for behaviours the function stored is expected to have.
+@end table
+
+@node Output buffer options
+@section Output buffer options
+
+@vindex competitive-companion-collapse-test-cases
+@table @asis
+@item @code{competitive-companion-collapse-test-cases}
+Controls whether test cases in the output buffer should be initially collapsed.
+@end table
+
+@vindex competitive-companion-separate-stderr
+@table @asis
+@item @code{competitive-companion-separate-stderr}
+If non-nil, stdout and stderr are shown separately on output buffers. NOTE that stderr is never considered when validating your answer, this just affects the output display.
+@end table
+
+You can also customize the faces for each of the supported verdicts (@samp{TLE} is included but not currently used). The faces are named @code{competitive-companion-verdict-*}.
+
+@node Server options
+@section Server options
+
+The package runs a local http server to communicate with the browser extension, the options below control its behaviour:
+
+@vindex competitive-companion-server-port
+@table @asis
+@item @code{competitive-companion-server-port}
+Port on which the package's server listens. This must be consistent with the browser extension's configuration, @ref{Initial setup}.
 @end table
 
 @node Function and Command Index
