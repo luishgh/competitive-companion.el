@@ -1,6 +1,6 @@
 #+TITLE: Competitive Companion for Emacs
 
-Simple Emacs integration with [[https://github.com/jmerle/competitive-companion][competitive companion]]. /Still a work in progress/.
+Simple Emacs integration with [[https://github.com/jmerle/competitive-companion][competitive companion]].
 
 [[https://github.com/luishgh/Dotfiles/blob/master/Emacs.org#competitive-companion][My personal configuration]], you may take it as a slightly undocumented inspiration for yours.
 
@@ -9,12 +9,15 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 - Automatically download all task's sample test cases.
 - Generate task's implementation file with user's template.
 - Run program against all test cases, see wrong answers in pop-up (help) buffer.
+- Add/remove/edit test cases easily.
 - Support to multiple programming languages.
+- Detect basic verdicts (AC, WA, RTE)
 
 ** Planned features
 
-- [ ] Support more verdicts (TLE, MLE, RTE).
-- [ ] Add/edit/run test cases directly in a dedicated test cases buffer.
+These are the features which would be nice to have on the future, not necessarily where I'm working next:
+
+- [ ] Support more verdicts (TLE, MLE).
 - [ ] Automatic submission (offload to another software most probably)
 
 ** Non planned features
