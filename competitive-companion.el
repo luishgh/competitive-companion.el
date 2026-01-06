@@ -89,6 +89,9 @@
 (defvar competitive-companion--prompt-task-filename nil
   "Holds value of `competitive-companion-prompt-task-filename' when mode turns on.")
 
+(defvar competitive-companion--modeline-item nil
+  "Competitive Companion item for the global-mode-line.")
+
 ;;;; Customization
 
 (defgroup competitive-companion nil
@@ -198,6 +201,15 @@ Unfornunately, an everywhere works, sensible solution seems impossible."
   :type 'function
   :group 'competitive-companion)
 
+(defcustom competitive-companion-modeline-support t
+  "Enable modeline icon to indicate mode is on.
+
+This uses `global-mode-string', which means it should work on things
+like `doom-modeline' and similars.
+See `competitive-companion-modeline-face'."
+  :type 'boolean
+  :group 'competitive-companion)
+
 ;;;; Commands
 
 ;;;###autoload
@@ -208,14 +220,25 @@ Turning this on sets the variable
 `default-directory', so it should be done inside
 the contest's dedicated folder."
   :global t
-  :lighter " CC"
+  :lighter nil
   :keymap competitive-companion-mode-map
   (if competitive-companion-mode
       (progn
         (setq competitive-companion--contest-directory default-directory)
         (setq competitive-companion--prompt-task-filename competitive-companion-prompt-task-filename)
         (competitive-companion--start-server)
+        (when competitive-companion-modeline-support
+          (setq competitive-companion--modeline-item
+                '(:eval (when competitive-companion-mode
+                          (if (require 'nerd-icons nil 'noerror)
+                              (concat " " (nerd-icons-mdicon "nf-md-balloon" :face 'competitive-companion-modeline-face) " ")
+                            (concat " " (propertize "CC" 'face 'competitive-companion-modeline-face) " ")))))
+          (add-to-list 'global-mode-string competitive-companion--modeline-item))
+
         (message "Competitive Companion mode activated."))
+    (setq global-mode-string
+          (seq-remove (lambda (item) (equal item competitive-companion--modeline-item))
+                      global-mode-string))
     (setq competitive-companion--contest-directory nil)
     (setq competitive-companion--current-task nil)
     (setq competitive-companion--prompt-task-filename nil)
@@ -761,6 +784,12 @@ Returns a string propertized with a semantic font-locking."
 (defface competitive-companion-verdict-ac
   '((t :inherit success))
   "Face for the AC text in output buffer."
+  :group 'competitive-companion)
+
+(defface competitive-companion-modeline-face
+  '((t :foreground "#ff0000"))
+  "Face for the balloon icon in modeline.
+See `competitive-companion-modeline-support'."
   :group 'competitive-companion)
 
 ;;; _

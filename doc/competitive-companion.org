@@ -134,6 +134,16 @@ The package runs a local http server to communicate with the browser extension, 
 #+vindex: competitive-companion-server-port
 - ~competitive-companion-server-port~ :: Port on which the package's server listens. This must be consistent with the browser extension's configuration, [[*Initial setup][Initial setup]].
 
+** Modeline support
+
+This package provides a fairly simple modeline support. If enabled, the modeline will display an indicator when the mode is active. If the =nerd-icons= package is installed, the indicator is a balloon. Otherwise, it defaults to =" CC "=.
+
+#+vindex: competitive-companion-modeline-support
+- ~competitive-companion-modeline-support~ :: Enable modeline support
+
+#+vindex: competitive-companion-modeline-face
+- ~competitive-companion-modeline-face~ :: Face used by the modeline indicator
+
 * Function and Command Index
 :PROPERTIES:
 :APPENDIX:   t
