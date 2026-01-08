@@ -67,6 +67,10 @@ Tutorial
 * During a contest::
 * Inside the outputs buffer::
 
+Initial setup
+
+* Evil integration::
+
 During a contest
 
 * User Commands::
@@ -112,6 +116,34 @@ Now, we need to tell the extension and Emacs to communicate through the same por
 
 Now is the perfect time to take a look at the options in @ref{Customizing} to make sure the package behaves like you expect. If you don't want to dig into customization just yet, please take a quick look at the language/file options (@ref{Language/file options}), as they are the ones that must be set correctly for the package to work.
 
+@menu
+* Evil integration::
+@end menu
+
+@node Evil integration
+@subsection Evil integration
+
+If you are an user of @code{evil-mode}, you should call the function below in your configuration after loading this package:
+
+@findex competitive-companion-setup-evil
+@table @asis
+@item @code{competitive-companion-setup-evil}
+Set up default bindings for Evil users. This avoids that Evil supresses the package's default bindings in the outputs buffer, @ref{Inside the outputs buffer}.
+@end table
+
+For example, using @code{use-package} your config should look something like this:
+
+@lisp
+(use-package competitive-companion
+  ;;; other stuff...
+  :config
+  (with-eval-after-load 'evil
+    (competitive-companion-setup-evil))
+
+  ;;; Remaining of the :config block...
+  )
+@end lisp
+
 @node During a contest
 @section During a contest
 
@@ -139,6 +171,8 @@ Get that AC@!
 
 @node User Commands
 @subsection User Commands
+
+The commands below are the main source of interaction with the package. It is strongly recommended that you use your Emacs configuration to tune them to your needs. You can create a command that creates a new contest folder and automatically turns on @code{competitive-companion-mode}, another command that compiles the current file and after runs @code{competitive-companion-run-tests}, etc.
 
 @findex competitive-companion-mode
 @table @asis

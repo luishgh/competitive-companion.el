@@ -38,6 +38,10 @@
 (require 'server)
 (require 'magit-section)
 
+;; Chill compiler...
+(declare-function evil-set-initial-state "evil-core" (mode state))
+(declare-function evil-define-key "evil-core" (state keymap key def &rest bindings))
+
 ;;;; Variables
 
 (defvar-local competitive-companion--current-task nil
@@ -245,6 +249,16 @@ the contest's dedicated folder."
     (delete-process "*competitive-companion-server*")
     (competitive-companion--kill-buffers)
     (message "Competitive Companion mode deactivated.")))
+
+;;;###autoload
+(defun competitive-companion-setup-evil ()
+  "Set up default Evil bindings for `competitive-companion'.
+See Info node `(competitive-companion) Evil integration'"
+  (interactive)
+  (when (featurep 'evil)
+    (evil-set-initial-state 'competitive-companion-output-mode 'motion)
+    (evil-define-key 'motion competitive-companion-output-mode-map
+      "+" #'competitive-companion--add-test-case)))
 
 (define-derived-mode competitive-companion-output-mode
   magit-section-mode

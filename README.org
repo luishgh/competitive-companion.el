@@ -12,6 +12,7 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 - Add/remove/edit test cases easily.
 - Support to multiple programming languages.
 - Detect basic verdicts (AC, WA, RTE)
+- Native =evil-mode= support!
 
 ** Planned features
 
@@ -59,7 +60,7 @@ Add this to =$DOOMDIR/packages.el=:
 
 ** Documentation
 
-This package includes an Info manual! After installation, check it out with:
+This package includes an Info manual! After installation, please check it out with:
 
 #+begin_example
 M-x info-display-manual RET competitive-companion RET
