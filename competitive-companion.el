@@ -257,8 +257,8 @@ See Info node `(competitive-companion) Evil integration'"
   (interactive)
   (when (featurep 'evil)
     (evil-set-initial-state 'competitive-companion-output-mode 'motion)
-    (evil-define-key 'motion competitive-companion-output-mode-map
-      "+" #'competitive-companion--add-test-case)))
+    (eval '(evil-define-key 'motion 'competitive-companion-output-mode-map
+             "+" #'competitive-companion--add-test-case))))
 
 (define-derived-mode competitive-companion-output-mode
   magit-section-mode
