@@ -350,11 +350,16 @@ If it is alive but not visible, display it and select its window."
                   (generate-new-buffer "*competitive-companion-output*"))
       (competitive-companion-run-tests program competitive-companion--output-buffer))))
 
-(defun competitive-companion-run-tests (command output-buffer)
+(defun competitive-companion-run-tests (&optional command output-buffer)
   "Run all test cases for current task using `COMMAND'.
 Reports success if all tests pass,
 show failed test cases outputs on `OUTPUT-BUFFER' otherwise.
-Pass nil on second argument to signal it should create a new one."
+Default value for `COMMAND' is the last used command for the current task,
+if that exists.
+Otherwise, we take the suggestion from `competitive-companion-guess-program'.
+Non internal uses should set `OUTPUT-BUFFER' to nil.
+
+The return value indicates if all test cases were successful."
   (interactive (progn
                  (unless (buffer-file-name)
                    (user-error "Current buffer is not visiting a file"))
@@ -370,10 +375,26 @@ Pass nil on second argument to signal it should create a new one."
                              (file-name-nondirectory competitive-companion--current-command)
                            (when-let* ((guess (funcall competitive-companion-guess-program (buffer-file-name))))
                              (file-name-nondirectory guess)))))
-                       (if (buffer-live-p competitive-companion--output-buffer)
-                           competitive-companion--output-buffer
-                         (setq-local competitive-companion--output-buffer (generate-new-buffer "*competitive-companion-output*"))
-                         competitive-companion--output-buffer))))
+                       nil)))
+
+  (unless output-buffer
+    (setq output-buffer
+          (if (buffer-live-p competitive-companion--output-buffer)
+              competitive-companion--output-buffer
+            (setq-local competitive-companion--output-buffer
+                        (generate-new-buffer "*competitive-companion-output*"))
+            competitive-companion--output-buffer)))
+
+  (unless command
+    (setq command
+          (expand-file-name
+           (if competitive-companion--current-command
+               (file-name-nondirectory competitive-companion--current-command)
+             (when-let* ((guess (funcall competitive-companion-guess-program (buffer-file-name))))
+               (file-name-nondirectory guess))))))
+
+  (unless command
+    (user-error "Could not guess value of `COMMAND'"))
 
   (unless (file-regular-p command)
     (user-error "`%s' is not a regular file!" command))
@@ -473,7 +494,8 @@ Pass nil on second argument to signal it should create a new one."
               (message "All tests passed! [stderr IS BEING USED]"))
 
           (message "Some tests failed.")
-          (pop-to-buffer output-buffer))))))
+          (pop-to-buffer output-buffer))))
+    all-success))
 
 (defun competitive-companion--open-section-file ()
   "Open the file associated with the current section."

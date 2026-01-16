@@ -172,7 +172,7 @@ Get that AC@!
 @node User Commands
 @subsection User Commands
 
-The commands below are the main source of interaction with the package. It is strongly recommended that you use your Emacs configuration to tune them to your needs. You can create a command that creates a new contest folder and automatically turns on @code{competitive-companion-mode}, another command that compiles the current file and after runs @code{competitive-companion-run-tests}, etc.
+The commands below are the main source of interaction with the package. It is strongly recommended that you use your Emacs configuration to tune them to your needs. You can create a command that creates a new contest folder and automatically turns on @code{competitive-companion-mode}, another command that compiles the current file and after runs @code{competitive-companion-run-tests}, etc. Check the docstrings for additional details.
 
 @findex competitive-companion-mode
 @table @asis
