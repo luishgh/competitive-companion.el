@@ -442,6 +442,7 @@ The return value indicates if all test cases were successful."
 
         ;; we don't want the test count to reset if the user reverts the buffer
         (put 'competitive-companion--test-count 'permanent-local t)
+        (put 'competitive-companion--original-test-count 'permanent-local t)
 
         (erase-buffer)
         (competitive-companion-output-mode)
