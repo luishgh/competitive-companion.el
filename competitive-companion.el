@@ -523,18 +523,21 @@ The return value indicates if all test cases were successful."
         (revert-buffer)))))
 
 (defun competitive-companion--add-test-case ()
-  "Add test case to current output buffer task."
+  "Add test case to current output buffer task, and move point to it."
   (interactive)
   (unless competitive-companion--test-count
     (error "`competitive-companion--test-count' is not set! Cannot add test case!"))
   (unless competitive-companion--current-task
     (error "`competitive-companion--current-task' is not set! Cannot add test case!"))
-  (setq-local competitive-companion--test-count (+ 1 competitive-companion--test-count))
+  (setq-local competitive-companion--test-count (1+ competitive-companion--test-count))
   (let ((input-file (expand-file-name (format "input%d.txt" competitive-companion--test-count) competitive-companion--current-task))
         (output-file (expand-file-name (format "output%d.txt" competitive-companion--test-count) competitive-companion--current-task)))
     (write-region "" nil input-file)
     (write-region "" nil output-file)
-    (revert-buffer)))
+    (revert-buffer)
+    (goto-char (point-min))
+    (when (search-forward (format "Test %d " competitive-companion--test-count) nil t)
+      (beginning-of-line))))
 
 ;;;; Structs
 
