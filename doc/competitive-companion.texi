@@ -257,7 +257,7 @@ List of available languages to choose when fetching a new task. Each entry shoul
 @vindex competitive-companion-task-template-file
 @table @asis
 @item @code{competitive-companion-task-template-file}
-Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour.
+Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour. See @code{competitive-companion-file-generation-hook} for total control of file generation.
 @end table
 
 @vindex competitive-companion-prompt-task-filename
@@ -275,7 +275,13 @@ Function that generates the task filename based on problem's @samp{NAME}, i.e. t
 @vindex competitive-companion-insert-header
 @table @asis
 @item @code{competitive-companion-insert-header}
-This boolean option controls whether the package's header is inserted in automatically generated files. It contains basic information about the problem and shares the package's GitHub. Set to nil if this annoys you.
+This boolean option controls whether the package's header is inserted in automatically generated files by @code{competitive-companion-insert-default-header}. It contains basic information about the problem and shares the package's GitHub. Set to nil if this annoys you. See @code{competitive-companion-file-generation-hook} for total control of file generation.
+@end table
+
+@vindex competitive-companion-file-generation-hook
+@table @asis
+@item @code{competitive-companion-file-generation-hook}
+Hook run when a new task file is created. The functions in this hook are run in a temporary buffer visiting the newly created file. They can use the variable @code{competitive-companion-last-problem-data} to access problem metadata, check its docstring to see more details. The default behaviour is to first insert a default header, respecting @code{competitive-companion-insert-header}, and after inserting the user's template file, using the value of @code{competitive-companion-task-template-file}. Note that each function should expect the point to be at the end of the buffer and leave it there after being done.
 @end table
 
 @vindex competitive-companion-guess-program

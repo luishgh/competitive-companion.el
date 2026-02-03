@@ -64,6 +64,11 @@
 (defvar competitive-companion--contest-directory nil
   "Holds the current contest's directory.")
 
+(defvar competitive-companion-last-problem-data nil
+  "Holds the data alist for the last problem received from the browser extension.
+
+This is an alist representing the JSON replied by the browser extension")
+
 (defvar competitive-companion-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c .") #'competitive-companion-run-tests)
@@ -101,6 +106,17 @@
   "Competitive Companion integration for Emacs."
   :group 'tools
   :prefix "competitive-companion-")
+
+(defcustom competitive-companion-file-generation-hook
+  '(competitive-companion-insert-default-header
+    competitive-companion-insert-template-file)
+  "Hook run when a new task file is created.
+The functions in this hook are run in a temporary buffer visiting
+the newly created file.  They can use
+`competitive-companion-last-problem-data' to access problem
+metadata.  See Info node `(competitive-companion) Language/file options'"
+  :type 'hook
+  :group 'competitive-companion)
 
 ;;;;; Options
 
@@ -602,47 +618,57 @@ prompt for the filename.  Otherwise, generate it automatically passing
                         (expand-file-name default-filename competitive-companion--contest-directory))
       default-filename)))
 
-(defun competitive-companion--insert-header (name group url memory-limit time-limit)
-  "Insert the package's header on current buffer.
-Uses NAME as problem's name, GROUP as the contest's name,
-and the others (URL, MEMORY-LIMIT and TIME-LIMIT) have self explanatory names.
-MEMORY-LIMIT is in MBs and TIME-LIMIT in ms.
+(defun competitive-companion-insert-default-header ()
+  "Insert the default header in the current buffer.
+This function uses `competitive-companion-last-problem-data' to
+get the problem metadata.
 
-If `competitive-companion-insert-header' is non-nil, this becomes a no-op."
+If `competitive-companion-insert-header' is nil, this is a no-op."
   (when competitive-companion-insert-header
-    (funcall competitive-companion-task-major-mode)
-    (unless comment-start
-      (user-error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
-    (let ((start (point)))
-      (insert (format "Problem: '%s'
+    (let-alist competitive-companion-last-problem-data
+      (funcall competitive-companion-task-major-mode)
+      (unless comment-start
+        (user-error "The major mode %s, set by `competitive-companion-task-major-mode', does not define comment syntax!" competitive-companion-task-major-mode))
+      (let ((start (point)))
+        (insert (format "Problem: '%s'
 Contest: '%s'
+Judge: %s
 URL: '%s'
 Memory Limit: %s MB
 Time Limit: %s ms
 
 Powered by competitive-companion.el (https://github.com/luishgh/competitive-companion.el)
 
-" name group url memory-limit time-limit))
-      (comment-region start (point)))))
+" .name .contest .judge .url .memoryLimit .timeLimit))
+        (comment-region start (point))))))
+
+(defun competitive-companion-insert-template-file ()
+  "Insert the contents of `competitive-companion-task-template-file'."
+  (when (and competitive-companion-task-template-file
+             (file-regular-p competitive-companion-task-template-file))
+    (insert-file-contents competitive-companion-task-template-file)))
 
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
   (let* ((name (alist-get 'name data))
          (group (alist-get 'group data))
-         (url (alist-get 'url data))
          (tests (alist-get 'tests data))
-         (memory-limit (alist-get 'memoryLimit data))
-         (time-limit (alist-get 'timeLimit data))
          (slug (replace-regexp-in-string "[\\/:*?\"<>| ]" "_" name))
          (temp-dir (make-temp-file slug t))
          (task-filename (expand-file-name (competitive-companion--task-filename name) competitive-companion--contest-directory)))
+
+    ;; Augment data
+    (when-let* ((group-str (alist-get 'group data))
+                (parts (split-string group-str " - " t)))
+      (push `(judge . ,(string-trim (car parts))) data)
+      (push `(contest . ,(string-trim (cadr parts))) data))
+
+    (setq competitive-companion-last-problem-data data)
+
     (competitive-companion--write-test-cases temp-dir tests)
     (unless (file-exists-p task-filename)
       (with-temp-file task-filename
-        (competitive-companion--insert-header
-         name group url memory-limit time-limit)
-        (when competitive-companion-task-template-file
-          (insert-file-contents competitive-companion-task-template-file))))
+        (run-hooks 'competitive-companion-file-generation-hook)))
     (with-current-buffer (find-file-noselect task-filename)
       (funcall competitive-companion-task-major-mode)
       (setq-local competitive-companion--current-task temp-dir)

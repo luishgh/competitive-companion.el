@@ -125,7 +125,7 @@ These options refer to setting your programming language of choice and the conte
 - ~competitive-companion-languages~ :: List of available languages to choose when fetching a new task. Each entry should be of the form ~(MAJOR-MODE . EXTENSION)~ where ~EXTENSION~ is a string indicating a file extension, always starting with a dot.
 
 #+vindex: competitive-companion-task-template-file
-- ~competitive-companion-task-template-file~ :: Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour.
+- ~competitive-companion-task-template-file~ :: Template file that is used for automatically generated task implementation files. Set to nil to disable this behaviour. See ~competitive-companion-file-generation-hook~ for total control of file generation.
 
 #+vindex: competitive-companion-prompt-task-filename
 - ~competitive-companion-prompt-task-filename~ :: If non-nil, prompt for a task filename instead of automatically generating one when a task is received from the browser extension. This option must be set *BEFORE* turning on the mode and you need to restart the mode to toggle its value. This is particularly useful if generating an automatic name for an online judge is too difficult or you are doing problems from multiple sources on the same folder.
@@ -134,7 +134,10 @@ These options refer to setting your programming language of choice and the conte
 - ~competitive-companion-task-filename-generator~ :: Function that generates the task filename based on problem's =NAME=, i.e. the field received from the browser extension. This is used if ~competitive-companion-prompt-task-filename~ is non-nil. The default behaviour is documented in the variable's docstring and just works on most major online judges, but is not guaranteed to work on all judges as this is essentially impossible.
 
 #+vindex: competitive-companion-insert-header
-- ~competitive-companion-insert-header~ :: This boolean option controls whether the package's header is inserted in automatically generated files. It contains basic information about the problem and shares the package's GitHub. Set to nil if this annoys you.
+- ~competitive-companion-insert-header~ :: This boolean option controls whether the package's header is inserted in automatically generated files by ~competitive-companion-insert-default-header~. It contains basic information about the problem and shares the package's GitHub. Set to nil if this annoys you. See ~competitive-companion-file-generation-hook~ for total control of file generation.
+
+#+vindex: competitive-companion-file-generation-hook
+- ~competitive-companion-file-generation-hook~ :: Hook run when a new task file is created. The functions in this hook are run in a temporary buffer visiting the newly created file. They can use the variable ~competitive-companion-last-problem-data~ to access problem metadata, check its docstring to see more details. The default behaviour is to first insert a default header, respecting ~competitive-companion-insert-header~, and after inserting the user's template file, using the value of ~competitive-companion-task-template-file~. Note that each function should expect the point to be at the end of the buffer and leave it there after being done.
 
 #+vindex: competitive-companion-guess-program
 - ~competitive-companion-guess-program~ :: Function that guesses the program's name based on task's file name. This is used as the default value for running commands on the first time they are called. Check the docstring for behaviours the function stored is expected to have.
