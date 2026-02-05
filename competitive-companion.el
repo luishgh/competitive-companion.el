@@ -198,20 +198,27 @@ Set this to a function that always returns nil if you don't want any guessing."
   :type 'function
   :group 'competitive-companion)
 
-;; TODO: Decide a better name? This function generates the task filename based on the problem
-;; name (the field from Competitive Companion's JSON)
-;; TODO: We should allow this function to use the problem's GROUP, as this permits a more flexible behaviour which has access to current OJ
-(defcustom competitive-companion-task-filename-generator
-  (lambda (name)
-    (when (string-match "\\`[[:alnum:]]+" name)
-      (downcase (match-string 0 name))))
-  "Function that generates the task filename based on problem's `NAME'.
-`NAME' is the field received from the browser extension, tipically looks like:
-\"C2. The Cunning Seller (hard version)\" or
-\"F - Common Prefixes\".
-
+(defun competitive-companion-default-task-filename-generator (problem-data)
+  "Default task filename generator.
+`PROBLEM-DATA' should be an alist representing a return from
+the browser extension about a task.
 The default behaviour extracts the first alphanumerical characters from
-`NAME' and uses them, lowercased, as filename.
+problem's name and uses them, lowercased, as filename.
+This behaviour works on Codeforces and AtCoder,
+it is recommended to try it for yourself
+and customize this (possibly on a dir local basis) for other judges."
+  (let ((name (alist-get 'name problem-data)))
+    (when (string-match "\\`[[:alnum:]]+" name)
+      (downcase (match-string 0 name)))))
+
+(defcustom competitive-companion-task-filename-generator
+  #'competitive-companion-default-task-filename-generator
+  "Function that generates the task filename based on problem's data.
+The problem's data is an alist representing the JSON replied by
+the browser extension.
+
+The default behaviour is defined at
+`competitive-companion-default-task-filename-generator'.
 This behaviour works on Codeforces and AtCoder,
 it is recommended to try it for yourself
 and customize this (possibly on a dir local basis) for other judges.
@@ -605,13 +612,13 @@ If a server is already running, fails silently."
     (cdr (or (assoc mode-name competitive-companion-languages #'equal)
              '("_" . ".txt")))))
 
-(defun competitive-companion--task-filename (name)
+(defun competitive-companion--task-filename (problem-data)
   "Return the filename used for task named `NAME'.
 
 If `competitive-companion-prompt-task-filename' is non-nil,
 prompt for the filename.  Otherwise, generate it automatically passing
 `NAME' to `competitive-companion-task-filename-generator'."
-  (let ((default-filename (concat (funcall competitive-companion-task-filename-generator name)
+  (let ((default-filename (concat (funcall competitive-companion-task-filename-generator problem-data)
                                   (competitive-companion--default-task-extension))))
     (if competitive-companion--prompt-task-filename
         (read-file-name "Task file: " competitive-companion--contest-directory
@@ -650,20 +657,20 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
 
 (defun competitive-companion--process-data (data)
   "Process problem DATA received from Competitive Companion."
+  ;; Augment data
+  (when-let* ((group-str (alist-get 'group data))
+              (parts (split-string group-str " - " t)))
+    (push `(judge . ,(string-trim (car parts))) data)
+    (push `(contest . ,(string-trim (cadr parts))) data))
+
+  (setq competitive-companion-last-problem-data data)
+
   (let* ((name (alist-get 'name data))
          (group (alist-get 'group data))
          (tests (alist-get 'tests data))
          (slug (replace-regexp-in-string "[\\/:*?\"<>| ]" "_" name))
          (temp-dir (make-temp-file slug t))
-         (task-filename (expand-file-name (competitive-companion--task-filename name) competitive-companion--contest-directory)))
-
-    ;; Augment data
-    (when-let* ((group-str (alist-get 'group data))
-                (parts (split-string group-str " - " t)))
-      (push `(judge . ,(string-trim (car parts))) data)
-      (push `(contest . ,(string-trim (cadr parts))) data))
-
-    (setq competitive-companion-last-problem-data data)
+         (task-filename (expand-file-name (competitive-companion--task-filename data) competitive-companion--contest-directory)))
 
     (competitive-companion--write-test-cases temp-dir tests)
     (unless (file-exists-p task-filename)
