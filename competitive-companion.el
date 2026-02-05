@@ -613,11 +613,11 @@ If a server is already running, fails silently."
              '("_" . ".txt")))))
 
 (defun competitive-companion--task-filename (problem-data)
-  "Return the filename used for task named `NAME'.
+  "Return the filename used for task.
 
 If `competitive-companion-prompt-task-filename' is non-nil,
 prompt for the filename.  Otherwise, generate it automatically passing
-`NAME' to `competitive-companion-task-filename-generator'."
+`PROBLEM-DATA' to `competitive-companion-task-filename-generator'."
   (let ((default-filename (concat (funcall competitive-companion-task-filename-generator problem-data)
                                   (competitive-companion--default-task-extension))))
     (if competitive-companion--prompt-task-filename
