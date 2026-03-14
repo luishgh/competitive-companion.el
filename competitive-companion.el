@@ -157,7 +157,7 @@ Each entry should be of the form `(MAJOR-MODE . EXTENSION)', where
 `MAJOR-MODE' is the name of the major mode used for that programming
 language and `EXTENSION' is a string indicating the file extension,
 always preceded by a dot."
-  :type '(list (cons symbol string))
+  :type '(repeat (cons symbol string))
   :group 'competitive-companion)
 
 (defcustom competitive-companion-collapse-test-cases t
