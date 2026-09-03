@@ -24,7 +24,7 @@ This package provides an Emacs integration to the Competitive Companion browser 
 
 This package provides an Emacs integration to the [[https://github.com/jmerle/competitive-companion][Competitive Companion browser extension]]. It also provides some commands to speed up the coding-compiling-test loop during online contests.
 
-The package is designed to be minimalistic and as non-intrusive as possible, while still providing some level of convenience. The idea is that during an online contest, you turn on the global minor mode. Then, when you read a problem with the browser extension, Emacs will automatically download the test cases to temporary files, without cluttering your folders, and generate an implementation file using your preferred language and template in the contest's folder. When you are done implementing the code and compiling it, the package provides an interactive command that runs the program against the downloaded test cases. Then, if all outputs matched, it just lets you know in the minibuffer. Otherwise, an special buffer pops up with only the failed test cases.
+The package is designed to be minimalistic and as non-intrusive as possible, while still providing some level of convenience. The idea is that during an online contest, you turn on the global minor mode. Then, when you read a problem with the browser extension, Emacs will automatically download the test cases into a hidden directory next to the implementation file, without cluttering your folder listing, and generate an implementation file using your preferred language and template in the contest's folder. When you are done implementing the code and compiling it, the package provides an interactive command that runs the program against the downloaded test cases. Then, if all outputs matched, it just lets you know in the minibuffer. Otherwise, an special buffer pops up with only the failed test cases.
 
 * Installation
 
@@ -66,7 +66,7 @@ This short tutorial describes the basic usage of the package throughout a typica
 
 1. Make a folder for the contest and open with ~M-x dired~.
 2. Turn on ~competitive-companion-mode~. This automatically selects the current folder as the contest's folder and starts the connection with the browser extension.
-3. Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded to temporary files.
+3. Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded into a hidden directory alongside it (see the "Important observations" below for the exact naming convention).
 4. Code!
 5. After compiling your program, run it against all test cases with ~competitive-companion-run-tests~. The outputs buffer uses ~magit-section~, the library that implements the togglable sections of [[https://magit.vc/][Magit]], which means all the bindings you would typically expect on such an interface works! (*Tip*: check all the enabled bindings with ~C-h m~)
 6. Get that AC!
@@ -89,6 +89,7 @@ The commands below are the main source of interaction with the package. It is st
 - You need to run ~competitive-companion-run-tests~ while inside the task implementation file's buffer. This helps ~competitive-companion.el~ determine which test cases it should run. You can, however, have multiple binaries (one standard and one compiled with a stress test flag, for example) for the same task and choose which one to run against the test cases.
 - You *should not kill a task implementation file's buffer during the contest*. As said above, the package uses buffer local variables to associate a programming file with its test cases directory. If you kill the task buffer after loading its cases, you'll have to use the browser extension to load them again. Your implementation file will be preserved, as is explained below.
 - If a file with the automatically generated filename already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases, opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
+- Test cases are persisted on disk as a hidden sibling directory of the implementation file, named =.{filename-without-extension}= (e.g. =.a/= next to =a.cpp=), containing =input<N>.txt= / =output<N>.txt= pairs. This directory is not deleted automatically and is safe to inspect or edit directly, which is handy when debugging against a specific case outside Emacs. Re-fetching a problem overwrites the original test files but preserves any you added manually.
 - The package considers only the stdout to check answers, so you don't need to worry about using stderr. Most judges do this as well, but debugging output can result in =TLE=, thus ~competitive-companion-run-tests~ will let you know if all cases succeeded and stderr is being used.
 
 
@@ -98,7 +99,7 @@ In the case of your program failing some test case, a special =*competitive-comp
 
 To rerun all test cases using the last program you used for that particular task, just execute the ~revert-buffer~ command.
 
-To edit a test case, press ~RET~ while inside its =Input= and =Expected Output= sections. This will open the temporary file on the current buffer. After you are done, just go back to the outputs buffer and revert it to rerun all test cases against the previously used program.
+To edit a test case, press ~RET~ while inside its =Input= and =Expected Output= sections. This will open the underlying file on the current buffer. After you are done, just go back to the outputs buffer and revert it to rerun all test cases against the previously used program.
 
 To add a test case, press ~+~ while inside the outputs buffer. This will add a test case with empty input and expected output, which you can edit.
 

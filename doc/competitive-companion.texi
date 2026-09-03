@@ -12,10 +12,10 @@ Copyright (C) 2024-2026 Luis Higino <luis.higino@@dcc.ufmg.br>
 
 You can redistribute this document and/or modify it under the terms
 of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any
+Foundation@comma{} either version 3 of the License@comma{} or (at your option) any
 later version.
 
-This document is distributed in the hope that it will be useful,
+This document is distributed in the hope that it will be useful@comma{}
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE@.  See the GNU
 General Public License for more details.
@@ -91,7 +91,7 @@ Customizing
 
 This package provides an Emacs integration to the @uref{https://github.com/jmerle/competitive-companion, Competitive Companion browser extension}. It also provides some commands to speed up the coding-compiling-test loop during online contests.
 
-The package is designed to be minimalistic and as non-intrusive as possible, while still providing some level of convenience. The idea is that during an online contest, you turn on the global minor mode. Then, when you read a problem with the browser extension, Emacs will automatically download the test cases to temporary files, without cluttering your folders, and generate an implementation file using your preferred language and template in the contest's folder. When you are done implementing the code and compiling it, the package provides an interactive command that runs the program against the downloaded test cases. Then, if all outputs matched, it just lets you know in the minibuffer. Otherwise, an special buffer pops up with only the failed test cases.
+The package is designed to be minimalistic and as non-intrusive as possible@comma{} while still providing some level of convenience. The idea is that during an online contest@comma{} you turn on the global minor mode. Then@comma{} when you read a problem with the browser extension@comma{} Emacs will automatically download the test cases into a hidden directory next to the implementation file@comma{} without cluttering your folder listing@comma{} and generate an implementation file using your preferred language and template in the contest's folder. When you are done implementing the code and compiling it@comma{} the package provides an interactive command that runs the program against the downloaded test cases. Then@comma{} if all outputs matched@comma{} it just lets you know in the minibuffer. Otherwise@comma{} an special buffer pops up with only the failed test cases.
 
 @node Installation
 @chapter Installation
@@ -110,11 +110,11 @@ This package is currently only available through the GitHub repository. Check in
 @node Initial setup
 @section Initial setup
 
-First, download the @uref{https://github.com/jmerle/competitive-companion, competitive companion browser extension} for your favorite (and supported) browser. The extension is the one responsible for reading the problem's information from the web-page.
+First@comma{} download the @uref{https://github.com/jmerle/competitive-companion, competitive companion browser extension} for your favorite (and supported) browser. The extension is the one responsible for reading the problem's information from the web-page.
 
-Now, we need to tell the extension and Emacs to communicate through the same port. For that, add the value of @code{competitive-companion-server-port} to @strong{Custom ports} in the extension's preference menu. Note you can alter the value of this custom variable if the default port is already being used by something else on your computer.
+Now@comma{} we need to tell the extension and Emacs to communicate through the same port. For that@comma{} add the value of @code{competitive-companion-server-port} to @strong{Custom ports} in the extension's preference menu. Note you can alter the value of this custom variable if the default port is already being used by something else on your computer.
 
-Now is the perfect time to take a look at the options in @ref{Customizing} to make sure the package behaves like you expect. If you don't want to dig into customization just yet, please take a quick look at the language/file options (@ref{Language/file options}), as they are the ones that must be set correctly for the package to work.
+Now is the perfect time to take a look at the options in @ref{Customizing, , Customizing} to make sure the package behaves like you expect. If you don't want to dig into customization just yet@comma{} please take a quick look at the language/file options (@ref{Language/file options, , Language/file options})@comma{} as they are the ones that must be set correctly for the package to work.
 
 @menu
 * Evil integration::
@@ -123,15 +123,15 @@ Now is the perfect time to take a look at the options in @ref{Customizing} to ma
 @node Evil integration
 @subsection Evil integration
 
-If you are an user of @code{evil-mode}, you should call the function below in your configuration after loading this package:
+If you are an user of @code{evil-mode}@comma{} you should call the function below in your configuration after loading this package:
 
 @findex competitive-companion-setup-evil
 @table @asis
 @item @code{competitive-companion-setup-evil}
-Set up default bindings for Evil users. This avoids that Evil supresses the package's default bindings in the outputs buffer, @ref{Inside the outputs buffer}.
+Set up default bindings for Evil users. This avoids that Evil supresses the package's default bindings in the outputs buffer@comma{} @ref{Inside the outputs buffer, , Inside the outputs buffer}.
 @end table
 
-For example, using @code{use-package} your config should look something like this:
+For example@comma{} using @code{use-package} your config should look something like this:
 
 @lisp
 (use-package competitive-companion
@@ -155,11 +155,11 @@ Make a folder for the contest and open with @code{M-x dired}.
 @item
 Turn on @code{competitive-companion-mode}. This automatically selects the current folder as the contest's folder and starts the connection with the browser extension.
 @item
-Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded to temporary files.
+Open a task page in your browser and click the extension button. The task's implementation file is automatically generated in the contest's folder and test cases are downloaded into a hidden directory alongside it (see the "Important observations" below for the exact naming convention).
 @item
 Code!
 @item
-After compiling your program, run it against all test cases with @code{competitive-companion-run-tests}. The outputs buffer uses @code{magit-section}, the library that implements the togglable sections of @uref{https://magit.vc/, Magit}, which means all the bindings you would typically expect on such an interface works! (@strong{Tip}: check all the enabled bindings with @code{C-h m})
+After compiling your program@comma{} run it against all test cases with @code{competitive-companion-run-tests}. The outputs buffer uses @code{magit-section}@comma{} the library that implements the togglable sections of @uref{https://magit.vc/, Magit}@comma{} which means all the bindings you would typically expect on such an interface works! (@strong{Tip}: check all the enabled bindings with @code{C-h m})
 @item
 Get that AC@!
 @end enumerate
@@ -172,7 +172,7 @@ Get that AC@!
 @node User Commands
 @subsection User Commands
 
-The commands below are the main source of interaction with the package. It is strongly recommended that you use your Emacs configuration to tune them to your needs. You can create a command that creates a new contest folder and automatically turns on @code{competitive-companion-mode}, another command that compiles the current file and after runs @code{competitive-companion-run-tests}, etc. Check the docstrings for additional details.
+The commands below are the main source of interaction with the package. It is strongly recommended that you use your Emacs configuration to tune them to your needs. You can create a command that creates a new contest folder and automatically turns on @code{competitive-companion-mode}@comma{} another command that compiles the current file and after runs @code{competitive-companion-run-tests}@comma{} etc. Check the docstrings for additional details.
 
 @findex competitive-companion-mode
 @table @asis
@@ -183,13 +183,13 @@ starts the connection with the browser extension and sets the contest's folder t
 @findex competitive-companion-run-tests
 @table @asis
 @item @code{competitive-companion-run-tests}
-prompts for a program to run against the test case of the current task. The program is run synchronously, so the feedback is showed as soon as your program finishes execution and you can abort the execution with @code{C-g} if it hangs (which probably signals an infinite loop or @samp{TLE}). The default value for the prompt is either the last used program if that exists or is automatically generated by the lambda stored at @code{competitive-companion-guess-program}. Customize this variable if the default behaviour does not suit you.
+prompts for a program to run against the test case of the current task. The program is run synchronously@comma{} so the feedback is showed as soon as your program finishes execution and you can abort the execution with @code{C-g} if it hangs (which probably signals an infinite loop or @samp{TLE}). The default value for the prompt is either the last used program if that exists or is automatically generated by the lambda stored at @code{competitive-companion-guess-program}. Customize this variable if the default behaviour does not suit you.
 @end table
 
 @findex competitive-companion-toggle-output-buffer
 @table @asis
 @item @code{competitive-companion-toggle-output-buffer}
-switches the cursor to the current task's output buffer in a DWIM fashion. If the buffer does not exist, tries to run @code{competitive-companion-run-tests} with the default value.
+switches the cursor to the current task's output buffer in a DWIM fashion. If the buffer does not exist@comma{} tries to run @code{competitive-companion-run-tests} with the default value.
 @end table
 
 @node Important observations
@@ -197,27 +197,29 @@ switches the cursor to the current task's output buffer in a DWIM fashion. If th
 
 @itemize
 @item
-You need to run @code{competitive-companion-run-tests} while inside the task implementation file's buffer. This helps @code{competitive-companion.el} determine which test cases it should run. You can, however, have multiple binaries (one standard and one compiled with a stress test flag, for example) for the same task and choose which one to run against the test cases.
+You need to run @code{competitive-companion-run-tests} while inside the task implementation file's buffer. This helps @code{competitive-companion.el} determine which test cases it should run. You can@comma{} however@comma{} have multiple binaries (one standard and one compiled with a stress test flag@comma{} for example) for the same task and choose which one to run against the test cases.
 @item
-You @strong{should not kill a task implementation file's buffer during the contest}. As said above, the package uses buffer local variables to associate a programming file with its test cases directory. If you kill the task buffer after loading its cases, you'll have to use the browser extension to load them again. Your implementation file will be preserved, as is explained below.
+You @strong{should not kill a task implementation file's buffer during the contest}. As said above@comma{} the package uses buffer local variables to associate a programming file with its test cases directory. If you kill the task buffer after loading its cases@comma{} you'll have to use the browser extension to load them again. Your implementation file will be preserved@comma{} as is explained below.
 @item
-If a file with the automatically generated filename already exists in the contest folder, selecting that task's page with the browser extension only downloads the test cases, opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
+If a file with the automatically generated filename already exists in the contest folder@comma{} selecting that task's page with the browser extension only downloads the test cases@comma{} opens the file in a buffer and adjusts that buffer's local variables to associate it with the case files.
 @item
-The package considers only the stdout to check answers, so you don't need to worry about using stderr. Most judges do this as well, but debugging output can result in @samp{TLE}, thus @code{competitive-companion-run-tests} will let you know if all cases succeeded and stderr is being used.
+Test cases are persisted on disk as a hidden sibling directory of the implementation file@comma{} named @samp{.@{filename-without-extension@}} (e.g. @samp{.a/} next to @samp{a.cpp})@comma{} containing @samp{input<N>.txt} / @samp{output<N>.txt} pairs. This directory is not deleted automatically and is safe to inspect or edit directly@comma{} which is handy when debugging against a specific case outside Emacs. Re-fetching a problem overwrites the original test files but preserves any you added manually.
+@item
+The package considers only the stdout to check answers@comma{} so you don't need to worry about using stderr. Most judges do this as well@comma{} but debugging output can result in @samp{TLE}@comma{} thus @code{competitive-companion-run-tests} will let you know if all cases succeeded and stderr is being used.
 @end itemize
 
 @node Inside the outputs buffer
 @section Inside the outputs buffer
 
-In the case of your program failing some test case, a special @samp{*competitive-companion-output*} buffer will pop-up. Inside of it, you can navigate with the usual @samp{magit-section} bindings, but you can also add/remove/edit tests cases. In case you want to see the buffer again or open it when all tests pass, you can use the @code{competitive-companion-toggle-output-buffer} command.
+In the case of your program failing some test case@comma{} a special @samp{*competitive-companion-output*} buffer will pop-up. Inside of it@comma{} you can navigate with the usual @samp{magit-section} bindings@comma{} but you can also add/remove/edit tests cases. In case you want to see the buffer again or open it when all tests pass@comma{} you can use the @code{competitive-companion-toggle-output-buffer} command.
 
-To rerun all test cases using the last program you used for that particular task, just execute the @code{revert-buffer} command.
+To rerun all test cases using the last program you used for that particular task@comma{} just execute the @code{revert-buffer} command.
 
-To edit a test case, press @code{RET} while inside its @samp{Input} and @samp{Expected Output} sections. This will open the temporary file on the current buffer. After you are done, just go back to the outputs buffer and revert it to rerun all test cases against the previously used program.
+To edit a test case@comma{} press @code{RET} while inside its @samp{Input} and @samp{Expected Output} sections. This will open the underlying file on the current buffer. After you are done@comma{} just go back to the outputs buffer and revert it to rerun all test cases against the previously used program.
 
-To add a test case, press @code{+} while inside the outputs buffer. This will add a test case with empty input and expected output, which you can edit.
+To add a test case@comma{} press @code{+} while inside the outputs buffer. This will add a test case with empty input and expected output@comma{} which you can edit.
 
-To remove a test case, move the cursor to the test case header and press @code{-}. The package will gently stop you if you try to remove original test cases, as this tends to not be a reasonable course of action.
+To remove a test case@comma{} move the cursor to the test case header and press @code{-}. The package will gently stop you if you try to remove original test cases@comma{} as this tends to not be a reasonable course of action.
 
 @node Customizing
 @chapter Customizing
@@ -228,7 +230,7 @@ This is a list of the customization options. You can also check them with:
 M-x customize-group RET competitive-companion RET
 @end example
 
-Note that it can be useful to set some of the options below with Directory Local Variables (@ref{Directory Variables,,,emacs,}) for a particular contest folder. Maybe you want to use a different programming language, disable automatic filenames, etc. For example, a possible use case is using the package for ladder/list style folders, where you solve problems coming from multiple online judges. In that case, you most probably want to set the file names for the implementation files manually, so you can set @code{competitive-companion-prompt-task-filename} to nil.
+Note that it can be useful to set some of the options below with Directory Local Variables (@ref{Directory Variables,,,emacs,}) for a particular contest folder. Maybe you want to use a different programming language@comma{} disable automatic filenames@comma{} etc. For example@comma{} a possible use case is using the package for ladder/list style folders@comma{} where you solve problems coming from multiple online judges. In that case@comma{} you most probably want to set the file names for the implementation files manually@comma{} so you can set @code{competitive-companion-prompt-task-filename} to nil.
 
 @menu
 * Language/file options::
@@ -245,13 +247,13 @@ These options refer to setting your programming language of choice and the conte
 @vindex competitive-companion-task-major-mode
 @table @asis
 @item @code{competitive-companion-task-major-mode}
-Major mode for task's implementation file. The package uses this to insert the template header correctly as comments, to generate the proper name for implementation files, etc. Its value must be one of the mode names present in @code{competitive-companion-languages} and should be a mode that defines @strong{comment syntax}.
+Major mode for task's implementation file. The package uses this to insert the template header correctly as comments@comma{} to generate the proper name for implementation files@comma{} etc. Its value must be one of the mode names present in @code{competitive-companion-languages} and should be a mode that defines @strong{comment syntax}.
 @end table
 
 @vindex competitive-companion-languages
 @table @asis
 @item @code{competitive-companion-languages}
-List of available languages to choose when fetching a new task. Each entry should be of the form @code{(MAJOR-MODE . EXTENSION)} where @code{EXTENSION} is a string indicating a file extension, always starting with a dot.
+List of available languages to choose when fetching a new task. Each entry should be of the form @code{(MAJOR-MODE . EXTENSION)} where @code{EXTENSION} is a string indicating a file extension@comma{} always starting with a dot.
 @end table
 
 @vindex competitive-companion-task-template-file
@@ -263,13 +265,13 @@ Template file that is used for automatically generated task implementation files
 @vindex competitive-companion-prompt-task-filename
 @table @asis
 @item @code{competitive-companion-prompt-task-filename}
-If non-nil, prompt for a task filename instead of automatically generating one when a task is received from the browser extension. This option must be set @strong{BEFORE} turning on the mode and you need to restart the mode to toggle its value. This is particularly useful if generating an automatic name for an online judge is too difficult or you are doing problems from multiple sources on the same folder.
+If non-nil@comma{} prompt for a task filename instead of automatically generating one when a task is received from the browser extension. This option must be set @strong{BEFORE} turning on the mode and you need to restart the mode to toggle its value. This is particularly useful if generating an automatic name for an online judge is too difficult or you are doing problems from multiple sources on the same folder.
 @end table
 
 @vindex competitive-companion-task-filename-generator
 @table @asis
 @item @code{competitive-companion-task-filename-generator}
-Function that generates the task filename based on problem's @samp{NAME}, i.e. the field received from the browser extension. This is used if @code{competitive-companion-prompt-task-filename} is non-nil. The default behaviour is documented in the variable's docstring and just works on most major online judges, but is not guaranteed to work on all judges as this is essentially impossible.
+Function that generates the task filename based on problem's @samp{NAME}@comma{} i.e. the field received from the browser extension. This is used if @code{competitive-companion-prompt-task-filename} is non-nil. The default behaviour is documented in the variable's docstring and just works on most major online judges@comma{} but is not guaranteed to work on all judges as this is essentially impossible.
 @end table
 
 @vindex competitive-companion-insert-header
@@ -281,7 +283,7 @@ This boolean option controls whether the package's header is inserted in automat
 @vindex competitive-companion-file-generation-hook
 @table @asis
 @item @code{competitive-companion-file-generation-hook}
-Hook run when a new task file is created. The functions in this hook are run in a temporary buffer visiting the newly created file. They can use the variable @code{competitive-companion-last-problem-data} to access problem metadata, check its docstring to see more details. The default behaviour is to first insert a default header, respecting @code{competitive-companion-insert-header}, and after inserting the user's template file, using the value of @code{competitive-companion-task-template-file}. Note that each function should expect the point to be at the end of the buffer and leave it there after being done.
+Hook run when a new task file is created. The functions in this hook are run in a temporary buffer visiting the newly created file. They can use the variable @code{competitive-companion-last-problem-data} to access problem metadata@comma{} check its docstring to see more details. The default behaviour is to first insert a default header@comma{} respecting @code{competitive-companion-insert-header}@comma{} and after inserting the user's template file@comma{} using the value of @code{competitive-companion-task-template-file}. Note that each function should expect the point to be at the end of the buffer and leave it there after being done.
 @end table
 
 @vindex competitive-companion-guess-program
@@ -302,7 +304,7 @@ Controls whether test cases in the output buffer should be initially collapsed.
 @vindex competitive-companion-separate-stderr
 @table @asis
 @item @code{competitive-companion-separate-stderr}
-If non-nil, stdout and stderr are shown separately on output buffers. NOTE that stderr is never considered when validating your answer, this just affects the output display.
+If non-nil@comma{} stdout and stderr are shown separately on output buffers. NOTE that stderr is never considered when validating your answer@comma{} this just affects the output display.
 @end table
 
 You can also customize the faces for each of the supported verdicts (@samp{TLE} is included but not currently used). The faces are named @code{competitive-companion-verdict-*}.
@@ -310,18 +312,18 @@ You can also customize the faces for each of the supported verdicts (@samp{TLE} 
 @node Server options
 @section Server options
 
-The package runs a local http server to communicate with the browser extension, the options below control its behaviour:
+The package runs a local http server to communicate with the browser extension@comma{} the options below control its behaviour:
 
 @vindex competitive-companion-server-port
 @table @asis
 @item @code{competitive-companion-server-port}
-Port on which the package's server listens. This must be consistent with the browser extension's configuration, @ref{Initial setup}.
+Port on which the package's server listens. This must be consistent with the browser extension's configuration@comma{} @ref{Initial setup, , Initial setup}.
 @end table
 
 @node Modeline support
 @section Modeline support
 
-This package provides a fairly simple modeline support. If enabled, the modeline will display an indicator when the mode is active. If the @samp{nerd-icons} package is installed, the indicator is a balloon. Otherwise, it defaults to @samp{" CC "}.
+This package provides a fairly simple modeline support. If enabled@comma{} the modeline will display an indicator when the mode is active. If the @samp{nerd-icons} package is installed@comma{} the indicator is a balloon. Otherwise@comma{} it defaults to @samp{" CC "}.
 
 @vindex competitive-companion-modeline-support
 @table @asis
