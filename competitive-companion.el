@@ -497,19 +497,19 @@ The return value indicates if all test cases were successful."
                   (insert (format "%s\n" input-text)))
                 (magit-insert-section (competitive-companion-expected-section output-file)
                   (magit-insert-heading "Expected Output")
-                  (insert (format "%s\n" expected-output)))
+                  (competitive-companion--insert-diff-lines expected-output stdout))
                 (if (and competitive-companion-separate-stderr
                          (not (string-empty-p stderr)))
                     (progn
                       (magit-insert-section (competitive-companion-actual-section)
                         (magit-insert-heading "Actual Output")
-                        (insert (format "%s\n" stdout)))
+                        (competitive-companion--insert-diff-lines stdout expected-output))
                       (magit-insert-section (competitive-companion-actual-section)
                         (magit-insert-heading "Actual Output [stderr]")
                         (insert (format "%s\n" stderr))))
                   (magit-insert-section (competitive-companion-actual-section)
                     (magit-insert-heading "Actual Output")
-                    (insert (format "%s\n" stdout))))))))
+                    (competitive-companion--insert-diff-lines stdout expected-output)))))))
         (goto-char (point-min))
         (if all-success
             (if empty-stderr
@@ -826,6 +826,26 @@ will be used to decide verdict."
          :output-file output-file
          :verdict 'ac)))))
 
+(defun competitive-companion--insert-diff-lines (text other-text)
+  "Insert TEXT into the current buffer, one line per line.
+Each line is highlighted with `competitive-companion-diff-match' if the
+line at the same position in OTHER-TEXT is identical, or with
+`competitive-companion-diff-mismatch' otherwise."
+  (let ((lines (split-string text "\n"))
+        (other-lines (split-string other-text "\n")))
+    ;; Drop a single trailing empty element caused by a trailing newline,
+    ;; to match the previous `(insert (format "%s\n" text))' behavior.
+    (when (and (cdr lines) (equal (car (last lines)) ""))
+      (setq lines (butlast lines)))
+    (when (and (cdr other-lines) (equal (car (last other-lines)) ""))
+      (setq other-lines (butlast other-lines)))
+    (dolist (line lines)
+      (let* ((other-line (pop other-lines))
+             (face (if (equal line other-line)
+                       'competitive-companion-diff-match
+                     'competitive-companion-diff-mismatch)))
+        (insert (propertize (concat line "\n") 'font-lock-face face))))))
+
 (defun competitive-companion--verdict-string (verdict)
   "Get VERDICT identifying string.
 Returns a string propertized with a semantic font-locking."
@@ -856,6 +876,16 @@ Returns a string propertized with a semantic font-locking."
 (defface competitive-companion-verdict-ac
   '((t :inherit success))
   "Face for the AC text in output buffer."
+  :group 'competitive-companion)
+
+(defface competitive-companion-diff-match
+  '((t :inherit diff-added))
+  "Face for output lines that match the corresponding expected/actual line."
+  :group 'competitive-companion)
+
+(defface competitive-companion-diff-mismatch
+  '((t :inherit diff-removed))
+  "Face for output lines that differ from the corresponding expected/actual line."
   :group 'competitive-companion)
 
 (defface competitive-companion-modeline-face
