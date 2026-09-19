@@ -5,7 +5,7 @@
 ;; Author: Luis Higino <luis.higino@dcc.ufmg.br>
 ;; URL: https://github.com/luishgh/competitive-companion.el
 ;; Created: 25 Dec 2024
-;; Package-Version: 0.0.1
+;; Package-Version: 0.0.2
 ;; Package-Requires: ((emacs "30.1") (magit-section "4.0.0"))
 ;; Keywords: convenience
 
