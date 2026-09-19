@@ -1,0 +1,27 @@
+#+TITLE: Changelog
+
+* 0.0.2
+
+- Persist test cases in a hidden directory instead of temp files.
+- Fix custom variable typing.
+- Better filename generation options.
+- Add option =competitive-companion-file-generation-hook=.
+- Documentation fixes.
+
+* 0.0.1
+
+Initial release.
+
+- Automatically download all task's sample test cases from Competitive
+  Companion via a local server.
+- Generate task's implementation file from a user-provided template.
+- Run the program against all test cases and inspect wrong answers, with
+  stdout/stderr diffing, in a =magit-section= based pop-up buffer.
+- Add/remove/edit test cases easily.
+- Detect basic verdicts (AC, WA, RTE).
+- Progress reporting while running tests.
+- Modeline support.
+- Native =evil-mode= support.
+- Configurable filename generation.
+- Guix packaging.
+- Info manual.

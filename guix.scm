@@ -7,7 +7,7 @@
 
 (package
   (name "emacs-competitive-companion")
-  (version "0.0.1")
+  (version "0.0.2")
   (source (local-file "." "checkout"
                       #:recursive? #t))
   (build-system emacs-build-system)
