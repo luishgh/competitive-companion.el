@@ -99,6 +99,57 @@ output buffer's text), :messages (strings passed to `message') and
       (delete-directory contest-dir t))
     (list :result result :output output :messages messages :after after-value)))
 
+(defmacro cc-test-with-temp-dir (var &rest body)
+  "Bind VAR to a fresh temporary directory around BODY, then delete it."
+  (declare (indent 1))
+  `(let ((,var (file-name-as-directory (make-temp-file "cc-test-" t))))
+     (unwind-protect (progn ,@body)
+       (delete-directory ,var t))))
+
+(cl-defun cc-test-execute (program input &key hard-limit warn-after merge-stderr quit-after)
+  "Run PROGRAM on INPUT with `competitive-companion--execute'.
+PROGRAM is passed to `cc-test-make-program'; INPUT is a string.
+HARD-LIMIT, WARN-AFTER and MERGE-STDERR are passed along.  When
+QUIT-AFTER is non-nil, simulate \\[keyboard-quit] after that many
+seconds.  Return the plist from `competitive-companion--execute' with
+:messages (strings passed to `message') added."
+  (cc-test-with-temp-dir dir
+    (let ((command (cc-test-make-program dir program))
+          (input-file (expand-file-name "input1.txt" dir))
+          (timer (when quit-after
+                   (run-at-time quit-after nil (lambda () (setq quit-flag t))))))
+      (write-region input nil input-file)
+      (unwind-protect
+          (cc-test-capturing-messages messages
+            (append (competitive-companion--execute
+                     command input-file
+                     :index 1 :hard-limit hard-limit :warn-after warn-after
+                     :merge-stderr merge-stderr)
+                    (list :messages messages)))
+        (when timer (cancel-timer timer))))))
+
+(defun cc-test-leftovers ()
+  "Return processes and buffers left behind by test runs."
+  (append
+   (seq-filter (lambda (process)
+                 (string-match-p "\\`competitive-companion-\\(run\\|stderr\\)" (process-name process)))
+               (process-list))
+   (seq-filter (lambda (buffer)
+                 (string-match-p "\\` \\*competitive-companion-\\(stdout\\|stderr\\)" (buffer-name buffer)))
+               (buffer-list))))
+
+(defun cc-test-counting-program (counter-file body)
+  "Return a program body that appends a line to COUNTER-FILE, then runs BODY."
+  (format "echo run >> %s\n%s" (shell-quote-argument counter-file) body))
+
+(defun cc-test-count-lines (file)
+  "Return the number of lines in FILE, or 0 if it does not exist."
+  (if (file-exists-p file)
+      (with-temp-buffer
+        (insert-file-contents file)
+        (count-lines (point-min) (point-max)))
+    0))
+
 (provide 'competitive-companion-test-helpers)
 
 ;; Local Variables:

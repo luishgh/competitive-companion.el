@@ -464,7 +464,7 @@ The return value indicates if all test cases were successful."
                  (substring task-hashname 0 1)))
          (original-test-count competitive-companion--original-test-count)
          (time-limit competitive-companion--current-time-limit)
-         (test-results (competitive-companion--run-test-cases command task-directory))
+         (test-results (competitive-companion--run-test-cases command task-directory time-limit))
          (failed-test-results
           (seq-sort
            (lambda (result-a result-b)
@@ -761,14 +761,20 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
       (when (and buffer-name (string-prefix-p "*competitive-companion" buffer-name))
         (kill-buffer buffer)))))
 
-(defun competitive-companion--run-test-cases (command task-directory)
+(defun competitive-companion--run-test-cases (command task-directory &optional judge-limit)
   "Run COMMAND against all test cases in TASK-DIRECTORY.
+
+JUDGE-LIMIT is the judge's time limit in milliseconds, or nil if unknown.
+It decides how long each test case may run, see
+`competitive-companion-time-limit'.
 
 Returns a list of `cc-test-result'.
 The order of results is not guaranteed."
 
   (let* ((default-directory task-directory)
          (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
+         (hard-limit (competitive-companion--hard-limit judge-limit))
+         (warn-after (competitive-companion--slow-test-delay judge-limit))
          (test-results (list)))
     (dolist-with-progress-reporter (input-file test-files test-results)
         "Running test cases..."
@@ -776,116 +782,146 @@ The order of results is not guaranteed."
              (_ (string-match "[0-9]+" match-input))
              (index (string-to-number (match-string 0 match-input)))
              (output-file (expand-file-name (format "output%d.txt" index))))
-        (push (competitive-companion--run-program command index input-file output-file) test-results)))))
+        (push (competitive-companion--run-program command index input-file output-file
+                                                  hard-limit warn-after)
+              test-results)))))
 
-(defun competitive-companion--run-program (command index input-file output-file)
-  "Run COMMAND with INPUT-FILE as input and return a test-result record.
+(cl-defun competitive-companion--execute (command input-file
+                                                  &key index hard-limit warn-after merge-stderr)
+  "Run COMMAND with the contents of INPUT-FILE on its stdin.
 
-INDEX should be the number identifing the test case and EXPECTED-OUTPUT
-will be used to decide verdict."
-  (let ((expected-output (with-temp-buffer
-                           (insert-file-contents output-file)
-                           (buffer-string)))
-        (out-buffer (generate-new-buffer " *cc-out*"))
-        (stdout-buffer (generate-new-buffer " *cc-stdout*"))
-        (stderr-file (make-temp-file "cc-stderr-"))
-        (input-text (with-temp-buffer
-                      (insert-file-contents input-file)
-                      (buffer-string)))
-        (stdout-value nil)
-        (separate-stdout nil)
-        (stderr-value nil)
-        (return-value nil))
-    ;; TODO: decide a custom verdict and/or implement more complex test case selection for showing on the output buffer
-    ;; Empty test cases should always show up in the outputs buffer
-    (unless (not (string-empty-p input-text))
-      (make-competitive-companion-test-result
-             :index index
-             :input input-text
-             :stdout stdout-value
-             :stderr stderr-value
-             :expected expected-output
-             :input-file input-file
-             :output-file output-file
-             :verdict 'wa))
+INDEX is the test case number, used to report a slow test case after
+WARN-AFTER seconds.  The program is killed after HARD-LIMIT seconds;
+if HARD-LIMIT is nil, it runs until it exits or the user quits.  If
+MERGE-STDERR is non-nil, stderr is mixed into stdout, keeping the order
+in which the program wrote them.
+
+Return a plist with:
+  :status   `exit', `signal', `timeout' or `aborted' (the user quit)
+  :code     the exit status or signal number, if the program ended itself
+  :stdout   the program's stdout (with stderr, if MERGE-STDERR)
+  :stderr   the program's stderr, or nil if MERGE-STDERR
+  :elapsed  wall-clock seconds the program ran"
+  (let ((stdout-buffer (generate-new-buffer " *competitive-companion-stdout*"))
+        (stderr-buffer (unless merge-stderr
+                         (generate-new-buffer " *competitive-companion-stderr*")))
+        (start (float-time))
+        stderr-process process status elapsed)
     (unwind-protect
         (progn
-          ;; NOTE: We run the program one additional time just to get joined outputs,
-          ;; because we always use separate stdout for deciding verdict.
-          ;; Is there a way to get both joined outputs and only considering stdout on verdict with only one execution?
-          (unless competitive-companion-separate-stderr
-            (call-process command input-file (list out-buffer t))
-            (let* ((out (with-current-buffer out-buffer
-                          (split-string (buffer-string) "\n" t "[ \t\r]+")))
-                   (joined-out (concat (string-join out "\n") "\n")))
-              (setq stdout-value joined-out)))
-          (progn
-            ;; Call the command, redirecting stdout to buffer, stderr to file
-            (setq return-value (call-process command input-file (list stdout-buffer stderr-file)))
-
-
-            ;; Process stdout (this already trims whitespaces)
-            (let* ((stdout (with-current-buffer stdout-buffer
-                             (split-string (buffer-string) "\n" t "[ \t\r]+")))
-                   (joined-stdout (concat (string-join stdout "\n") "\n"))
-                   (stderr (with-temp-buffer
-                             (insert-file-contents stderr-file)
-                             (buffer-string))))
-              (setq separate-stdout joined-stdout)
-              (when competitive-companion-separate-stderr
-                (setq stdout-value joined-stdout))
-
-              (setq stderr-value stderr))))
-      ;; Cleanup
+          (when stderr-buffer
+            (setq stderr-process
+                  (make-pipe-process :name "competitive-companion-stderr"
+                                     :buffer stderr-buffer
+                                     :coding 'utf-8-unix
+                                     :noquery t
+                                     :sentinel #'ignore)))
+          (setq process
+                (make-process :name "competitive-companion-run"
+                              :command (list command)
+                              :buffer stdout-buffer
+                              :stderr stderr-process
+                              :coding 'utf-8-unix
+                              :connection-type 'pipe
+                              :noquery t
+                              :sentinel #'ignore))
+          (condition-case nil
+              (progn
+                ;; Programs that exit without reading all of their input
+                ;; close the pipe early; that is not an error.
+                (ignore-error error
+                  (with-temp-buffer
+                    (insert-file-contents input-file)
+                    (process-send-region process (point-min) (point-max)))
+                  (process-send-eof process))
+                (let ((reported 0))
+                  (while (and (process-live-p process) (not status))
+                    (accept-process-output process 0.05)
+                    (setq elapsed (- (float-time) start))
+                    (when (and warn-after
+                               (> elapsed warn-after)
+                               (>= (floor elapsed) reported))
+                      (setq reported (1+ (floor elapsed)))
+                      (message "Test %d still running (%.1fs)... %s to abort"
+                               index elapsed (substitute-command-keys "\\[keyboard-quit]")))
+                    (when (and hard-limit (> elapsed hard-limit))
+                      (setq status 'timeout)))))
+            (quit (setq status 'aborted)))
+          (setq elapsed (- (float-time) start))
+          (when status
+            (kill-process process))
+          ;; Wait for the process to end and read whatever it wrote.
+          (while (accept-process-output process 0.01))
+          (while (process-live-p process)
+            (accept-process-output process 0.01))
+          (when stderr-process
+            (while (accept-process-output stderr-process 0.01)))
+          (list :status (or status (process-status process))
+                :code (unless status (process-exit-status process))
+                :stdout (with-current-buffer stdout-buffer (buffer-string))
+                :stderr (when stderr-buffer
+                          (with-current-buffer stderr-buffer (buffer-string)))
+                :elapsed elapsed))
+      (when process (delete-process process))
+      (when stderr-process (delete-process stderr-process))
       (kill-buffer stdout-buffer)
-      (delete-file stderr-file))
+      (when stderr-buffer (kill-buffer stderr-buffer)))))
 
-    ;; First, we check if there was a error
-    (if (not (equal return-value 0))
-        (if (stringp return-value)
-            ;; process terminated with a signal
-            ;; this tipically indicates a runtime error or a false assertion
-            ;; for now, we just consider an RTE, but it would be nice to get better diagnostics if possible
-            (make-competitive-companion-test-result
-             :index index
-             :input input-text
-             :stdout stdout-value
-             :stderr stderr-value
-             :expected expected-output
-             :input-file input-file
-             :output-file output-file
-             :verdict 'rte)
-          ;; exit status is a number, program got RTE
-          (make-competitive-companion-test-result
-           :index index
-           :input input-text
-           :stdout stdout-value
-           :stderr stderr-value
-           :expected expected-output
-           :input-file input-file
-           :output-file output-file
-           :verdict 'rte))
-      ;; Now we check the output, using the separate stdout
-      (if (not (string= separate-stdout expected-output))
-          (make-competitive-companion-test-result
-           :index index
-           :input input-text
-           :stdout stdout-value
-           :stderr stderr-value
-           :expected expected-output
-           :input-file input-file
-           :output-file output-file
-           :verdict 'wa)
-        ;; NOTE: For now, we don't check memory or time limits, so we conclude test got AC
-        (make-competitive-companion-test-result
-         :index index
-         :input input-text
-         :stdout stdout-value
-         :stderr stderr-value
-         :expected expected-output
-         :input-file input-file
-         :output-file output-file
-         :verdict 'ac)))))
+(defun competitive-companion--normalize-output (output)
+  "Return OUTPUT without blank lines and surrounding whitespace on each line."
+  (concat (string-join (split-string output "\n" t "[ \t\r]+") "\n") "\n"))
+
+(defun competitive-companion--run-program (command index input-file output-file
+                                                   &optional hard-limit warn-after)
+  "Run COMMAND with INPUT-FILE as input and return a test-result record.
+
+INDEX should be the number identifing the test case and the contents of
+OUTPUT-FILE are used to decide the verdict.  HARD-LIMIT and WARN-AFTER
+are passed to `competitive-companion--execute'."
+  (let* ((expected-output (with-temp-buffer
+                            (insert-file-contents output-file)
+                            (buffer-string)))
+         (input-text (with-temp-buffer
+                       (insert-file-contents input-file)
+                       (buffer-string)))
+         ;; The verdict is always decided on stdout alone.
+         (run (competitive-companion--execute command input-file
+                                              :index index
+                                              :hard-limit hard-limit
+                                              :warn-after warn-after))
+         (stdout (competitive-companion--normalize-output (plist-get run :stdout)))
+         (stderr (plist-get run :stderr))
+         (verdict (pcase (plist-get run :status)
+                    ((or 'timeout 'aborted) 'tle)
+                    ('exit (cond ((/= (plist-get run :code) 0) 'rte)
+                                 ((string= stdout expected-output) 'ac)
+                                 (t 'wa)))
+                    (_ 'rte)))
+         (shown-output
+          (cond
+           ((or competitive-companion-separate-stderr (eq verdict 'ac)) stdout)
+           ;; Running a timed out program again would mean waiting for it twice.
+           ((eq verdict 'tle)
+            (competitive-companion--normalize-output (concat (plist-get run :stdout) stderr)))
+           ;; Run again with stderr mixed into stdout, keeping their order.
+           (t
+            (competitive-companion--normalize-output
+             (plist-get (competitive-companion--execute command input-file
+                                                        :index index
+                                                        :hard-limit hard-limit
+                                                        :warn-after warn-after
+                                                        :merge-stderr t)
+                        :stdout))))))
+    (make-competitive-companion-test-result
+     :index index
+     :verdict verdict
+     :time-ms (round (* 1000 (plist-get run :elapsed)))
+     :input input-text
+     :stdout shown-output
+     :stderr stderr
+     :expected expected-output
+     :input-file input-file
+     :output-file output-file)))
 
 (defun competitive-companion--verdict-string (verdict)
   "Get VERDICT identifying string.

@@ -169,6 +169,115 @@
                          (list before competitive-companion--current-time-limit))))))
     (should (equal (plist-get run :after) '(2000 2000)))))
 
+;;;; Running a single program: `competitive-companion--execute'
+
+(ert-deftest cc-test-execute/normal-exit ()
+  (let ((run (cc-test-execute 'cat "1 2\n")))
+    (should (eq (plist-get run :status) 'exit))
+    (should (eql (plist-get run :code) 0))
+    (should (equal (plist-get run :stdout) "1 2\n"))
+    (should (equal (plist-get run :stderr) ""))
+    (should (< 0 (plist-get run :elapsed) 1))))
+
+(ert-deftest cc-test-execute/exit-code ()
+  (let ((run (cc-test-execute 'exit3 "")))
+    (should (eq (plist-get run :status) 'exit))
+    (should (eql (plist-get run :code) 3))))
+
+(ert-deftest cc-test-execute/killed-by-signal ()
+  (should (eq (plist-get (cc-test-execute 'segv "") :status) 'signal)))
+
+(ert-deftest cc-test-execute/timeout ()
+  (let ((run (cc-test-execute 'hang "" :hard-limit 0.3)))
+    (should (eq (plist-get run :status) 'timeout))
+    (should (<= 0.3 (plist-get run :elapsed) 1.0))
+    (should-not (cc-test-leftovers))))
+
+(ert-deftest cc-test-execute/no-limit-until-quit ()
+  "Without a hard limit, \\[keyboard-quit] stops the program."
+  (let ((run (cc-test-execute 'hang "" :quit-after 0.3)))
+    (should (eq (plist-get run :status) 'aborted))
+    (should (<= 0.3 (plist-get run :elapsed) 1.0))
+    (should-not (cc-test-leftovers))))
+
+(ert-deftest cc-test-execute/separate-stderr ()
+  (let ((run (cc-test-execute 'stderr "")))
+    (should (equal (plist-get run :stdout) "out\n"))
+    (should (equal (plist-get run :stderr) "err\n"))))
+
+(ert-deftest cc-test-execute/merged-stderr-keeps-order ()
+  (let ((run (cc-test-execute 'stderr "" :merge-stderr t)))
+    (should (equal (plist-get run :stdout) "out\nerr\n"))))
+
+(ert-deftest cc-test-execute/large-output-is-complete ()
+  (should (= (length (plist-get (cc-test-execute 'bigout "") :stdout)) 2000000)))
+
+(ert-deftest cc-test-execute/program-not-reading-stdin ()
+  (let ((run (cc-test-execute 'noread "1 2 3\n")))
+    (should (eq (plist-get run :status) 'exit))
+    (should (equal (plist-get run :stdout) "x\n"))))
+
+(ert-deftest cc-test-execute/reports-slow-test ()
+  (let ((run (cc-test-execute 'slow "" :warn-after 0.1)))
+    (should (eq (plist-get run :status) 'exit))
+    (should (seq-some (lambda (msg) (string-prefix-p "Test 1 still running" msg))
+                      (plist-get run :messages)))))
+
+(ert-deftest cc-test-execute/quiet-when-fast ()
+  (let ((run (cc-test-execute 'cat "" :warn-after 0.5)))
+    (should-not (seq-some (lambda (msg) (string-search "still running" msg))
+                          (plist-get run :messages)))))
+
+(ert-deftest cc-test-execute/cleans-up ()
+  (dolist (program '(cat stderr exit3 segv))
+    (cc-test-execute program "1\n")
+    (should-not (cc-test-leftovers))))
+
+;;;; Verdicts from `competitive-companion--execute' results
+
+(ert-deftest cc-test-run-tests/timeout-is-tle ()
+  (let* ((competitive-companion-time-limit 0.3)
+         (run (cc-test-run :tests '(("1\n" . "1\n")) :program 'hang)))
+    (should (null (plist-get run :result)))
+    (should (string-match-p "Test 1 +TLE" (plist-get run :output)))))
+
+(ert-deftest cc-test-run-tests/judge-limit-sets-hard-limit ()
+  "With a factor, the judge's limit decides when the program is killed."
+  (let* ((competitive-companion-time-limit '(factor . 1))
+         (competitive-companion-minimum-time-limit 0)
+         (start (float-time))
+         (run (cc-test-run :tests '(("1\n" . "1\n")) :program 'hang :time-limit 300)))
+    (should (string-match-p "Test 1 +TLE" (plist-get run :output)))
+    (should (< (- (float-time) start) 1.5))))
+
+(ert-deftest cc-test-run-program/records-time ()
+  (cc-test-with-temp-dir dir
+    (let ((command (cc-test-make-program dir 'cat))
+          (input-file (expand-file-name "input1.txt" dir))
+          (output-file (expand-file-name "output1.txt" dir)))
+      (write-region "1\n" nil input-file)
+      (write-region "1\n" nil output-file)
+      (let ((result (competitive-companion--run-program command 1 input-file output-file)))
+        (should (eq (competitive-companion-test-result-verdict result) 'ac))
+        (should (natnump (competitive-companion-test-result-time-ms result)))))))
+
+(ert-deftest cc-test-run-tests/runs-passing-test-once ()
+  "Accepted tests run once, also when stderr is merged into the output."
+  (cc-test-with-temp-dir dir
+    (let ((counter (expand-file-name "count" dir)))
+      (cc-test-run :tests '(("1\n" . "1\n"))
+                   :program (cc-test-counting-program counter "exec cat"))
+      (should (= (cc-test-count-lines counter) 1)))))
+
+(ert-deftest cc-test-run-tests/runs-timed-out-test-once ()
+  "A hanging program is not waited for twice."
+  (cc-test-with-temp-dir dir
+    (let ((counter (expand-file-name "count" dir))
+          (competitive-companion-time-limit 0.3))
+      (cc-test-run :tests '(("1\n" . "1\n"))
+                   :program (cc-test-counting-program counter "exec sleep 100"))
+      (should (= (cc-test-count-lines counter) 1)))))
+
 (provide 'competitive-companion-tests)
 
 ;; Local Variables:
