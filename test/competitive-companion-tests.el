@@ -95,6 +95,80 @@
          (run (cc-test-run :tests `((,input . ,(concat input "\n"))) :program 'cat)))
     (should (eq (plist-get run :result) t))))
 
+;;;; Time limits
+
+(ert-deftest cc-test-hard-limit/disabled ()
+  (let ((competitive-companion-time-limit nil))
+    (should (null (competitive-companion--hard-limit 2000)))
+    (should (null (competitive-companion--hard-limit nil)))))
+
+(ert-deftest cc-test-hard-limit/fixed-seconds ()
+  "A fixed limit ignores both the judge's limit and the minimum."
+  (let ((competitive-companion-time-limit 7)
+        (competitive-companion-minimum-time-limit 10))
+    (should (= (competitive-companion--hard-limit 2000) 7))
+    (should (= (competitive-companion--hard-limit nil) 7))))
+
+(ert-deftest cc-test-hard-limit/factor-of-judge-limit ()
+  (let ((competitive-companion-time-limit '(factor . 3))
+        (competitive-companion-minimum-time-limit 5))
+    (should (= (competitive-companion--hard-limit 2000) 6))
+    (should (= (competitive-companion--hard-limit 2500) 7.5))))
+
+(ert-deftest cc-test-hard-limit/factor-respects-minimum ()
+  (let ((competitive-companion-time-limit '(factor . 3))
+        (competitive-companion-minimum-time-limit 5))
+    (should (= (competitive-companion--hard-limit 1000) 5))))
+
+(ert-deftest cc-test-hard-limit/factor-without-judge-limit ()
+  "When the judge's limit is unknown, the minimum is used."
+  (let ((competitive-companion-time-limit '(factor . 3))
+        (competitive-companion-minimum-time-limit 5))
+    (should (= (competitive-companion--hard-limit nil) 5))))
+
+(ert-deftest cc-test-slow-test-delay/defaults-to-judge-limit ()
+  (let ((competitive-companion-slow-test-delay nil))
+    (should (= (competitive-companion--slow-test-delay 1500) 1.5))
+    (should (= (competitive-companion--slow-test-delay nil) 2))))
+
+(ert-deftest cc-test-slow-test-delay/explicit ()
+  (let ((competitive-companion-slow-test-delay 0.5))
+    (should (= (competitive-companion--slow-test-delay 1500) 0.5))
+    (should (= (competitive-companion--slow-test-delay nil) 0.5))))
+
+(ert-deftest cc-test-process-data/stores-time-limit ()
+  "Fetching a task keeps the judge's time limit in the task buffer."
+  (let* ((dir (file-name-as-directory (make-temp-file "cc-test-" t)))
+         (competitive-companion--contest-directory dir)
+         (competitive-companion--prompt-task-filename nil)
+         (competitive-companion-task-major-mode 'fundamental-mode)
+         (competitive-companion-file-generation-hook nil)
+         (competitive-companion-last-problem-data nil)
+         buffer)
+    (unwind-protect
+        (progn
+          (competitive-companion--process-data
+           `((name . "A. Sum") (group . "Codeforces - Round 1")
+             (timeLimit . 2000) (memoryLimit . 256)
+             (tests . [((input . "1 2\n") (output . "3\n"))])))
+          (setq buffer (get-file-buffer (expand-file-name "a.txt" dir)))
+          (should buffer)
+          (should (equal (buffer-local-value 'competitive-companion--current-time-limit buffer)
+                         2000)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory dir t))))
+
+(ert-deftest cc-test-run-tests/output-buffer-keeps-time-limit ()
+  "The time limit reaches the output buffer and survives a revert."
+  (let ((run (cc-test-run
+              :tests '(("1\n" . "2\n")) :program 'cat :time-limit 2000
+              :after (lambda ()
+                       (let ((before competitive-companion--current-time-limit))
+                         (revert-buffer)
+                         (list before competitive-companion--current-time-limit))))))
+    (should (equal (plist-get run :after) '(2000 2000)))))
+
 (provide 'competitive-companion-tests)
 
 ;; Local Variables:

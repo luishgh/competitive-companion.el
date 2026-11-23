@@ -53,22 +53,26 @@ printed, which keeps batch logs useful."
                    (apply orig format-string args))))
        ,@body)))
 
-(cl-defun cc-test-run (&key tests program (separate-stderr nil))
+(cl-defun cc-test-run (&key tests program (separate-stderr nil) time-limit after)
   "Run PROGRAM against TESTS with `competitive-companion-run-tests'.
 
 TESTS is a list of (INPUT . EXPECTED-OUTPUT) strings, written as
 inputN.txt/outputN.txt in a fresh hidden task directory.  PROGRAM is
 passed to `cc-test-make-program'.  SEPARATE-STDERR is bound as
-`competitive-companion-separate-stderr'.
+`competitive-companion-separate-stderr'.  TIME-LIMIT is the judge's
+time limit in milliseconds, as stored by `competitive-companion--process-data'.
+AFTER, if non-nil, is called with no arguments in the output buffer
+once the run is over.
 
 Everything is set up in a temporary directory and torn down afterwards.
 Return a plist with :result (the command's return value), :output (the
-output buffer's text) and :messages (strings passed to `message')."
+output buffer's text), :messages (strings passed to `message') and
+:after (what AFTER returned)."
   (let* ((contest-dir (file-name-as-directory (make-temp-file "cc-test-" t)))
          (task-dir (expand-file-name ".a" contest-dir))
          (command (cc-test-make-program contest-dir program))
          (competitive-companion-separate-stderr separate-stderr)
-         output-buffer result output messages)
+         output-buffer result output messages after-value)
     (unwind-protect
         (progn
           (make-directory task-dir)
@@ -80,16 +84,20 @@ output buffer's text) and :messages (strings passed to `message')."
             (setq-local competitive-companion--current-task task-dir)
             (setq-local competitive-companion--current-task-name "A. Test")
             (setq-local competitive-companion--original-test-count (length tests))
+            (setq-local competitive-companion--current-time-limit time-limit)
             (cc-test-capturing-messages captured
               (setq result (competitive-companion-run-tests command nil))
               (setq messages captured))
             (setq output-buffer competitive-companion--output-buffer)
             (setq output (with-current-buffer output-buffer
-                           (buffer-substring-no-properties (point-min) (point-max))))))
+                           (buffer-substring-no-properties (point-min) (point-max))))
+            (when after
+              (setq after-value (with-current-buffer output-buffer
+                                  (funcall after))))))
       (when (buffer-live-p output-buffer)
         (kill-buffer output-buffer))
       (delete-directory contest-dir t))
-    (list :result result :output output :messages messages)))
+    (list :result result :output output :messages messages :after after-value)))
 
 (provide 'competitive-companion-test-helpers)
 

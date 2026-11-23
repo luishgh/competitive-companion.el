@@ -55,6 +55,10 @@
 (defvar-local competitive-companion--original-test-count nil
   "Holds the original number of test cases for output buffer's task.")
 
+(defvar-local competitive-companion--current-time-limit nil
+  "Holds the current task's time limit on the judge, in milliseconds.
+It is nil when the judge's time limit is unknown.")
+
 (defvar-local competitive-companion--output-buffer nil
   "Holds the output buffer corresponding to this implementation file.")
 
@@ -196,6 +200,37 @@ NOTE: the function should always check if the guessed path exists
 before returning.
 Set this to a function that always returns nil if you don't want any guessing."
   :type 'function
+  :group 'competitive-companion)
+
+(defcustom competitive-companion-time-limit '(factor . 3)
+  "How long a program may run on a single test case before being killed.
+
+The killed test case gets a TLE verdict.  The value can be:
+- nil: never kill the program (abort it with \[keyboard-quit]);
+- a number: a fixed limit in seconds;
+- (factor . F): F times the judge's time limit, but never less than
+  `competitive-companion-minimum-time-limit'.
+
+Local builds (debug flags, sanitizers) are often much slower than on the
+judge, so this limit is meant to catch infinite loops, not to tell how
+close a solution is to the judge's time limit."
+  :type '(choice (const :tag "No limit" nil)
+                 (number :tag "Fixed limit (seconds)")
+                 (cons :tag "Multiple of the judge's limit"
+                       (const factor) (number :tag "Factor")))
+  :group 'competitive-companion)
+
+(defcustom competitive-companion-minimum-time-limit 5
+  "Least time limit in seconds when `competitive-companion-time-limit' is a factor.
+It is also the time limit when the judge's time limit is unknown."
+  :type 'number
+  :group 'competitive-companion)
+
+(defcustom competitive-companion-slow-test-delay nil
+  "Seconds before reporting that a test case is still running.
+If nil, use the judge's time limit, or 2 seconds when it is unknown."
+  :type '(choice (const :tag "Judge's time limit" nil)
+                 (number :tag "Seconds"))
   :group 'competitive-companion)
 
 (defun competitive-companion-default-task-filename-generator (problem-data)
@@ -428,6 +463,7 @@ The return value indicates if all test cases were successful."
                    competitive-companion--current-task-name
                  (substring task-hashname 0 1)))
          (original-test-count competitive-companion--original-test-count)
+         (time-limit competitive-companion--current-time-limit)
          (test-results (competitive-companion--run-test-cases command task-directory))
          (failed-test-results
           (seq-sort
@@ -473,6 +509,7 @@ The return value indicates if all test cases were successful."
         (setq-local competitive-companion--current-task task-directory)
         (setq-local competitive-companion--current-command command)
         (setq-local competitive-companion--current-task-name task)
+        (setq-local competitive-companion--current-time-limit time-limit)
         (unless competitive-companion--original-test-count
           (setq-local competitive-companion--test-count original-test-count)
           (setq-local competitive-companion--original-test-count competitive-companion--test-count))
@@ -606,6 +643,29 @@ If a server is already running, fails silently."
         (delete-process connection)
         (competitive-companion--process-data data)))))
 
+(defun competitive-companion--hard-limit (judge-limit)
+  "Return the seconds a test case may run, or nil for no limit.
+JUDGE-LIMIT is the judge's time limit in milliseconds, or nil if unknown.
+See `competitive-companion-time-limit'."
+  (pcase competitive-companion-time-limit
+    ('nil nil)
+    ((pred numberp) competitive-companion-time-limit)
+    (`(factor . ,factor)
+     (if judge-limit
+         (max (* factor (/ judge-limit 1000.0))
+              competitive-companion-minimum-time-limit)
+       competitive-companion-minimum-time-limit))
+    (value (user-error "Invalid `competitive-companion-time-limit': %S" value))))
+
+(defun competitive-companion--slow-test-delay (judge-limit)
+  "Return the seconds before reporting that a test case is still running.
+JUDGE-LIMIT is the judge's time limit in milliseconds, or nil if unknown.
+See `competitive-companion-slow-test-delay'."
+  (cond
+   (competitive-companion-slow-test-delay)
+   (judge-limit (/ judge-limit 1000.0))
+   (t 2)))
+
 (defun competitive-companion--default-task-extension ()
   "Get the default file extension based on `competitive-companion-task-major-mode'."
   (let ((mode-name competitive-companion-task-major-mode))
@@ -681,7 +741,8 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
       (funcall competitive-companion-task-major-mode)
       (setq-local competitive-companion--current-task test-dir)
       (setq-local competitive-companion--current-task-name name)
-      (setq-local competitive-companion--original-test-count (length tests)))
+      (setq-local competitive-companion--original-test-count (length tests))
+      (setq-local competitive-companion--current-time-limit (alist-get 'timeLimit data)))
     (message "Problem '%s' (%s) fetched and saved to %s" name group task-filename)))
 
 (defun competitive-companion--write-test-cases (directory test-cases)
