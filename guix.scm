@@ -11,6 +11,8 @@
   (source (local-file "." "checkout"
                       #:recursive? #t))
   (build-system emacs-build-system)
+  (arguments
+   (list #:test-command #~(list "make" "check")))
   ;; NOTE: only magit-section would be enough, but currently on Guix it is not packaged separately
   (propagated-inputs (list emacs-magit))
   (synopsis "Competitive Companion Integration")
