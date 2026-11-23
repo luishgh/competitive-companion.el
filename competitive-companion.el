@@ -104,6 +104,19 @@ This is an alist representing the JSON replied by the browser extension")
 (defvar competitive-companion--modeline-item nil
   "Competitive Companion item for the global-mode-line.")
 
+(defvar competitive-companion--pending-tasks nil
+  "Problem data received from the browser extension, not processed yet.
+Oldest first.  See `competitive-companion--process-pending-tasks'.")
+
+(defvar competitive-companion--pending-tasks-timer nil
+  "Timer that will process `competitive-companion--pending-tasks'.")
+
+(defvar competitive-companion--processing-tasks nil
+  "Non-nil while pending tasks are being processed.")
+
+(defvar competitive-companion--running-tests nil
+  "Non-nil while test cases run.")
+
 ;;;; Customization
 
 (defgroup competitive-companion nil
@@ -303,6 +316,9 @@ the contest's dedicated folder."
     (setq competitive-companion--contest-directory nil)
     (setq competitive-companion--current-task nil)
     (setq competitive-companion--prompt-task-filename nil)
+    (setq competitive-companion--pending-tasks nil)
+    (when (timerp competitive-companion--pending-tasks-timer)
+      (cancel-timer competitive-companion--pending-tasks-timer))
     (delete-process "*competitive-companion-server*")
     (competitive-companion--kill-buffers)
     (message "Competitive Companion mode deactivated.")))
@@ -464,7 +480,12 @@ The return value indicates if all test cases were successful."
                  (substring task-hashname 0 1)))
          (original-test-count competitive-companion--original-test-count)
          (time-limit competitive-companion--current-time-limit)
-         (test-results (competitive-companion--run-test-cases command task-directory time-limit))
+         (test-results
+          ;; Tasks received meanwhile wait for the run to end.
+          (unwind-protect
+              (let ((competitive-companion--running-tests t))
+                (competitive-companion--run-test-cases command task-directory time-limit))
+            (competitive-companion--schedule-pending-tasks 0)))
          (failed-test-results
           (seq-sort
            (lambda (result-a result-b)
@@ -669,11 +690,52 @@ its Content-Length header, is there."
             (progn
               (message "Invalid data received from Competitive Companion: '%s'" body)
               (competitive-companion--respond connection "400 Bad Request"))
-          ;; Answer last: the browser gives up waiting after a while, and
-          ;; then the answer fails.  The problem is not lost because of it.
-          (unwind-protect
-              (competitive-companion--process-data data)
-            (competitive-companion--respond connection "200 OK"))))))))
+          ;; Queue the problem before answering: the browser gives up
+          ;; waiting after a while, and then the answer fails.
+          (competitive-companion--queue-task data)
+          (competitive-companion--respond connection "200 OK")))))))
+
+(defun competitive-companion--queue-task (data)
+  "Queue problem DATA to be processed as soon as Emacs is free.
+Tasks are not processed in the process filter that receives them: a
+filter can run whenever Emacs waits, for instance in the middle of a
+filename prompt for another task or of a test run."
+  (setq competitive-companion--pending-tasks
+        (append competitive-companion--pending-tasks (list data)))
+  (competitive-companion--schedule-pending-tasks 0))
+
+(defun competitive-companion--schedule-pending-tasks (delay)
+  "Process pending tasks in DELAY seconds, if there are any."
+  (when (and competitive-companion--pending-tasks
+             (not (memq competitive-companion--pending-tasks-timer timer-list)))
+    (setq competitive-companion--pending-tasks-timer
+          (run-at-time delay nil #'competitive-companion--process-pending-tasks))))
+
+(defun competitive-companion--process-pending-tasks ()
+  "Process `competitive-companion--pending-tasks', one at a time, oldest first.
+Tasks wait while test cases run (fetching the running task again would
+change its test cases), and, when the filename is prompted for, while
+the minibuffer is in use.  Whoever makes them wait schedules them again."
+  (setq competitive-companion--pending-tasks-timer nil)
+  (cond
+   ((or competitive-companion--processing-tasks
+        competitive-companion--running-tests))
+   ((and competitive-companion--prompt-task-filename
+         (> (minibuffer-depth) 0))
+    ;; Nothing tells us when the minibuffer is free again.
+    (competitive-companion--schedule-pending-tasks 0.5))
+   (t
+    (let ((competitive-companion--processing-tasks t))
+      (while competitive-companion--pending-tasks
+        (let ((data (pop competitive-companion--pending-tasks)))
+          (condition-case err
+              ;; Timers run with quitting inhibited; allow it, so that
+              ;; \\[keyboard-quit] in the filename prompt skips this task.
+              (let ((inhibit-quit nil))
+                (competitive-companion--process-data data))
+            (quit (message "Skipped problem '%s'" (alist-get 'name data)))
+            (error (message "Could not process problem '%s': %s"
+                            (alist-get 'name data) (error-message-string err))))))))))
 
 (defun competitive-companion--respond (connection status)
   "Answer the request on CONNECTION with STATUS, then close it.
@@ -777,9 +839,15 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
     (competitive-companion--write-test-cases test-dir tests)
     (unless (file-exists-p task-filename)
       (with-temp-file task-filename
-        (run-hooks 'competitive-companion-file-generation-hook)))
+        ;; The hook sees this problem's data, even if another one
+        ;; arrives meanwhile.
+        (let ((competitive-companion-last-problem-data data))
+          (run-hooks 'competitive-companion-file-generation-hook))))
     (with-current-buffer (find-file-noselect task-filename)
-      (funcall competitive-companion-task-major-mode)
+      ;; Turning the mode on again would forget the buffer's local
+      ;; variables, like its output buffer, when a task is fetched again.
+      (unless (eq major-mode competitive-companion-task-major-mode)
+        (funcall competitive-companion-task-major-mode))
       (setq-local competitive-companion--current-task test-dir)
       (setq-local competitive-companion--current-task-name name)
       (setq-local competitive-companion--original-test-count (length tests))

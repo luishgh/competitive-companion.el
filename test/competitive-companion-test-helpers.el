@@ -53,7 +53,8 @@ printed, which keeps batch logs useful."
                    (apply orig format-string args))))
        ,@body)))
 
-(cl-defun cc-test-run (&key tests program (separate-stderr nil) time-limit after quit-after)
+(cl-defun cc-test-run (&key tests program (separate-stderr nil) time-limit after quit-after
+                            contest-dir)
   "Run PROGRAM against TESTS with `competitive-companion-run-tests'.
 
 TESTS is a list of (INPUT . EXPECTED-OUTPUT) strings, written as
@@ -65,11 +66,13 @@ AFTER, if non-nil, is called with no arguments in the output buffer
 once the run is over.  When QUIT-AFTER is non-nil, simulate
 \\[keyboard-quit] after that many seconds.
 
-Everything is set up in a temporary directory and torn down afterwards.
+Everything is set up in a temporary directory and torn down afterwards,
+unless CONTEST-DIR names the directory to use; that one is kept.
 Return a plist with :result (the command's return value), :output (the
 output buffer's text), :messages (strings passed to `message') and
 :after (what AFTER returned)."
-  (let* ((contest-dir (file-name-as-directory (make-temp-file "cc-test-" t)))
+  (let* ((own-dir (null contest-dir))
+         (contest-dir (or contest-dir (file-name-as-directory (make-temp-file "cc-test-" t))))
          (task-dir (expand-file-name ".a" contest-dir))
          (command (cc-test-make-program contest-dir program))
          (competitive-companion-separate-stderr separate-stderr)
@@ -78,7 +81,7 @@ output buffer's text), :messages (strings passed to `message') and
          output-buffer result output messages after-value)
     (unwind-protect
         (progn
-          (make-directory task-dir)
+          (make-directory task-dir t)
           (cl-loop for index from 1
                    for (input . expected) in tests do
                    (write-region input nil (expand-file-name (format "input%d.txt" index) task-dir))
@@ -100,7 +103,8 @@ output buffer's text), :messages (strings passed to `message') and
       (when timer (cancel-timer timer))
       (when (buffer-live-p output-buffer)
         (kill-buffer output-buffer))
-      (delete-directory contest-dir t))
+      (when own-dir
+        (delete-directory contest-dir t)))
     (list :result result :output output :messages messages :after after-value)))
 
 (defun cc-test-message-matching (regexp run)
@@ -239,6 +243,16 @@ connection.  Return the server's response, \"\" if there was none."
           response)
       (delete-process client))))
 
+(defun cc-test-start-request (port request)
+  "Send REQUEST to the task server on PORT without waiting for it.
+Return the client process; the caller deletes it."
+  (let ((client (make-network-process
+                 :name "cc-test-client" :host "127.0.0.1" :service port
+                 :family 'ipv4 :coding 'binary :noquery t
+                 :sentinel #'ignore :filter #'ignore)))
+    (process-send-string client request)
+    client))
+
 (defmacro cc-test-with-server (spec &rest body)
   "Run BODY with the task server listening on a random port.
 SPEC is (PORT DIR): PORT is bound to the server's port and DIR to the
@@ -282,14 +296,15 @@ bind these options again.  Everything is torn down afterwards."
     (kill-buffer buffer))
   (delete-directory dir t))
 
-(defun cc-test-task-buffer (dir name)
+(defun cc-test-task-buffer (dir name &optional timeout)
   "Return the buffer of the task file NAME in DIR, once it is set up.
-Wait up to 2 seconds for it."
+Wait up to TIMEOUT seconds (default 2) for it."
   (cc-test-wait-for
    (lambda ()
      (when-let* ((buffer (get-file-buffer (expand-file-name name dir))))
        (and (buffer-local-value 'competitive-companion--current-task buffer)
-            buffer)))))
+            buffer)))
+   timeout))
 
 (provide 'competitive-companion-test-helpers)
 

@@ -207,6 +207,8 @@ If a file with the automatically generated filename already exists in the contes
 @item
 Test cases are persisted on disk as a hidden sibling directory of the implementation file@comma{} named @samp{.@{filename-without-extension@}} (e.g. @samp{.a/} next to @samp{a.cpp})@comma{} containing @samp{input<N>.txt} / @samp{output<N>.txt} pairs. This directory is not deleted automatically and is safe to inspect or edit directly@comma{} which is handy when debugging against a specific case outside Emacs. Re-fetching a problem overwrites the original test files but preserves any you added manually.
 @item
+Tasks are processed one at a time@comma{} in the order they arrive. This matters when the extension parses a whole contest and sends all of its problems at once: with @code{competitive-companion-prompt-task-filename}@comma{} you are prompted for each filename in turn. A task that arrives while test cases are running@comma{} or while the minibuffer is in use and filenames are prompted for@comma{} is processed once Emacs is free@comma{} so fetching a task again never changes the test cases of a running test.
+@item
 The package considers only the stdout to check answers@comma{} so you don't need to worry about using stderr. Most judges do this as well@comma{} but debugging output can result in @samp{TLE}@comma{} thus @code{competitive-companion-run-tests} will let you know if all cases succeeded and stderr is being used.
 @end itemize
 

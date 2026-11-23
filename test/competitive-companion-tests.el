@@ -411,6 +411,115 @@ next one, so the merged run times out."
         (should (string-prefix-p "HTTP/1.1 400 " response))
         (should (seq-some (lambda (msg) (string-search "Invalid data" msg)) messages))))))
 
+;;;; Receiving several tasks
+;;
+;; Parsing a contest sends one request per problem, all at once, and
+;; requests can arrive whenever Emacs waits: in a minibuffer, or while
+;; test cases run.
+
+(defun cc-test-insert-problem-name ()
+  "File generation hook inserting the problem's name."
+  (insert (alist-get 'name competitive-companion-last-problem-data)))
+
+(ert-deftest cc-test-tasks/prompts-do-not-nest ()
+  "A task arriving while the filename of another is prompted for waits.
+Each task file gets its own problem's data."
+  (cc-test-with-server (port dir)
+    (let ((competitive-companion--prompt-task-filename t)
+          (competitive-companion-file-generation-hook '(cc-test-insert-problem-name))
+          (depth 0) (max-depth 0) (calls 0))
+      (cl-letf (((symbol-function 'read-file-name)
+                 (lambda (_prompt _dir default &rest _)
+                   (cl-incf calls)
+                   (cl-incf depth)
+                   (setq max-depth (max depth max-depth))
+                   (when (= calls 1)
+                     ;; The second problem arrives during the first prompt.
+                     (cc-test-send-request
+                      port (list (cc-test-http-request (cc-test-problem "B. Second")))))
+                   (cl-decf depth)
+                   default)))
+        (cc-test-send-request port (list (cc-test-http-request (cc-test-problem "A. First"))))
+        (should (cc-test-task-buffer dir "a.txt"))
+        (should (cc-test-task-buffer dir "b.txt"))
+        (should (= max-depth 1))
+        (should (equal (cc-test-file-string (expand-file-name "a.txt" dir)) "A. First"))
+        (should (equal (cc-test-file-string (expand-file-name "b.txt" dir)) "B. Second"))))))
+
+(ert-deftest cc-test-tasks/wait-for-the-minibuffer ()
+  "When the filename is prompted for, tasks wait until the minibuffer is free."
+  (cc-test-with-server (port dir)
+    (let ((competitive-companion--prompt-task-filename t)
+          (busy t))
+      (cl-letf (((symbol-function 'minibuffer-depth) (lambda () (if busy 1 0)))
+                ((symbol-function 'read-file-name)
+                 (lambda (_prompt _dir default &rest _) default)))
+        (cc-test-send-request port (list (cc-test-http-request (cc-test-problem "A. First"))))
+        (should-not (cc-test-task-buffer dir "a.txt" 0.3))
+        (setq busy nil)
+        (should (cc-test-task-buffer dir "a.txt" 2))))))
+
+(ert-deftest cc-test-tasks/quit-skips-one-task ()
+  "Quitting the filename prompt skips that task only."
+  (cc-test-with-server (port dir)
+    (let ((competitive-companion--prompt-task-filename t))
+      (cl-letf (((symbol-function 'read-file-name)
+                 (lambda (_prompt _dir default &rest _)
+                   (if (string-suffix-p "a.txt" default)
+                       (signal 'quit nil)
+                     default))))
+        (let ((clients (list (cc-test-start-request
+                              port (cc-test-http-request (cc-test-problem "A. First")))
+                             (cc-test-start-request
+                              port (cc-test-http-request (cc-test-problem "B. Second"))))))
+          (unwind-protect
+              (progn
+                (should (cc-test-task-buffer dir "b.txt"))
+                (should-not (file-exists-p (expand-file-name "a.txt" dir))))
+            (mapc #'delete-process clients)))))))
+
+(ert-deftest cc-test-tasks/wait-for-the-test-run ()
+  "A task arriving while test cases run does not touch them.
+Here the running task is fetched again with other test cases."
+  (cc-test-with-server (port dir)
+    (let* ((refetch (cc-test-http-request
+                     (cc-test-problem "A. Test" '(tests . [((input . "3\n") (output . "4\n"))
+                                                           ((input . "3\n") (output . "4\n"))]))))
+           (client nil)
+           (timer (run-at-time 0.1 nil (lambda () (setq client (cc-test-start-request port refetch))))))
+      (unwind-protect
+          (let ((run (cc-test-run :contest-dir dir
+                                  :tests '(("1\n" . "1\n") ("2\n" . "2\n"))
+                                  :program 'slow)))
+            (should client)
+            (should (eq (plist-get run :result) t))
+            ;; The task is fetched once the run is over.
+            (should (cc-test-wait-for
+                     (lambda () (equal (cc-test-file-string (expand-file-name ".a/input2.txt" dir))
+                                       "3\n")))))
+        (cancel-timer timer)
+        (when client (delete-process client))))))
+
+(ert-deftest cc-test-tasks/refetch-keeps-task-buffer-state ()
+  "Fetching a task again keeps what its buffer knows, like its output buffer."
+  (cc-test-with-server (port dir)
+    (let ((output (generate-new-buffer " *cc-test-output*")))
+      (unwind-protect
+          (let (buffer)
+            (cc-test-send-request port (list (cc-test-http-request (cc-test-problem "A. Sum"))))
+            (setq buffer (cc-test-task-buffer dir "a.txt"))
+            (should buffer)
+            (with-current-buffer buffer
+              (setq-local competitive-companion--output-buffer output))
+            (cc-test-send-request
+             port (list (cc-test-http-request
+                         (cc-test-problem "A. Sum" '(tests . [((input . "5\n") (output . "5\n"))])))))
+            (should (cc-test-wait-for
+                     (lambda () (equal (cc-test-file-string (expand-file-name ".a/input1.txt" dir))
+                                       "5\n"))))
+            (should (eq (buffer-local-value 'competitive-companion--output-buffer buffer) output)))
+        (kill-buffer output)))))
+
 ;;;; Display
 
 (ert-deftest cc-test-display/failed-heading-shows-time ()

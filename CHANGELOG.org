@@ -19,6 +19,14 @@
 - Fix problems lost or rejected ("Invalid data received") when the
   browser's request reaches Emacs in several pieces, as happens with
   large test cases.  Non-ASCII problem names are decoded as UTF-8.
+- Process tasks one at a time.  Parsing a whole contest with
+  ~competitive-companion-prompt-task-filename~ no longer fails with nested
+  prompts, and each task file's header shows its own problem.  ~C-g~ in a
+  filename prompt skips that task only.
+- A task received while test cases run waits for the run to end, so
+  fetching the running task again no longer changes its test cases
+  mid-run.  Fetching a task again keeps its buffer's link to its output
+  buffer.
 - Kill a program on time even when it never reads a large input (Emacs
   used to hang until ~C-g~).
 - When a failed test case runs again to show stderr mixed with stdout and
