@@ -1,5 +1,22 @@
 #+TITLE: Changelog
 
+* Unreleased
+
+- Detect =TLE=: programs running past ~competitive-companion-time-limit~
+  are killed. New options ~competitive-companion-time-limit~,
+  ~competitive-companion-minimum-time-limit~ and
+  ~competitive-companion-slow-test-delay~.
+- Report test cases that are still running in the echo area.
+- ~C-g~ aborts the running test case and skips the remaining ones, still
+  showing the results so far.
+- Show each failed test case's running time, and the slowest one when all
+  tests pass.
+- Run test cases in numeric order (=input10= no longer runs before
+  =input2=).
+- Accepted and timed out test cases run once, even when stderr is merged
+  into the output.
+- Add an ERT test suite, run by =guix build -f guix.scm=.
+
 * 0.0.2
 
 - Persist test cases in a hidden directory instead of temp files.

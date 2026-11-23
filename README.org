@@ -11,14 +11,14 @@ Simple Emacs integration with [[https://github.com/jmerle/competitive-companion]
 - Run program against all test cases, see wrong answers in pop-up (help) buffer.
 - Add/remove/edit test cases easily.
 - Support to multiple programming languages.
-- Detect basic verdicts (AC, WA, RTE)
+- Detect basic verdicts (AC, WA, RTE, TLE), with running times
 - Native =evil-mode= support!
 
 ** Planned features
 
 These are the features which would be nice to have on the future, not necessarily where I'm working next:
 
-- [ ] Support more verdicts (TLE, MLE).
+- [ ] Support more verdicts (MLE).
 - [ ] Automatic submission (offload to another software most probably)
 
 ** Non planned features
