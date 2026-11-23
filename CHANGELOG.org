@@ -16,6 +16,8 @@
 - Accepted and timed out test cases run once, even when stderr is merged
   into the output.
 - Add an ERT test suite, run by =guix build -f guix.scm=.
+- Kill a program on time even when it never reads a large input (Emacs
+  used to hang until ~C-g~).
 
 * 0.0.2
 

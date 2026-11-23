@@ -194,6 +194,24 @@
     (should (<= 0.3 (plist-get run :elapsed) 1.0))
     (should-not (cc-test-leftovers))))
 
+(ert-deftest cc-test-execute/timeout-while-writing-input ()
+  "The hard limit holds while the input is still being written.
+A program that never reads fills the pipe, so writing a large input
+blocks; the program must still be killed on time.  The quit is only a
+safety net that makes a regression fail instead of hang."
+  (let ((run (cc-test-execute 'hang (make-string 2000000 ?x)
+                              :hard-limit 0.3 :quit-after 3)))
+    (should (eq (plist-get run :status) 'timeout))
+    (should (<= 0.3 (plist-get run :elapsed) 1.5))
+    (should-not (cc-test-leftovers))))
+
+(ert-deftest cc-test-execute/slow-report-while-writing-input ()
+  "Slow test cases are reported while the input is still being written."
+  (let ((run (cc-test-execute 'hang (make-string 2000000 ?x)
+                              :hard-limit 0.5 :warn-after 0.1 :quit-after 3)))
+    (should (seq-some (lambda (msg) (string-prefix-p "Test 1 still running" msg))
+                      (plist-get run :messages)))))
+
 (ert-deftest cc-test-execute/no-limit-until-quit ()
   "Without a hard limit, \\[keyboard-quit] stops the program."
   (let ((run (cc-test-execute 'hang "" :quit-after 0.3)))

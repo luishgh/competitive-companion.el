@@ -818,7 +818,8 @@ Return a plist with:
         (stderr-buffer (unless merge-stderr
                          (generate-new-buffer " *competitive-companion-stderr*")))
         (start (float-time))
-        stderr-process process status elapsed)
+        (timeout (make-symbol "timeout"))
+        stderr-process process status elapsed timers)
     (unwind-protect
         (progn
           (when stderr-buffer
@@ -837,30 +838,41 @@ Return a plist with:
                               :connection-type 'pipe
                               :noquery t
                               :sentinel #'ignore))
+          ;; Writing the input blocks while the pipe is full, so the
+          ;; deadline and the slow test report are timers: they also run
+          ;; while Emacs waits to write.  The deadline leaves the write
+          ;; with a throw, like C-g does, and the program is
+          ;; killed afterwards: killing it during the write would make the
+          ;; write fail with SIGPIPE, which ends Emacs in batch mode.
+          (when hard-limit
+            (push (run-at-time hard-limit nil (lambda () (throw timeout 'timeout)))
+                  timers))
+          (when warn-after
+            (push (run-at-time warn-after 1
+                               (lambda ()
+                                 (when (and (not status) (process-live-p process))
+                                   (message "Test %d still running (%.1fs)... %s to abort"
+                                            index (- (float-time) start)
+                                            (substitute-command-keys "\\[keyboard-quit]")))))
+                  timers))
           (condition-case nil
-              (progn
-                ;; Programs that exit without reading all of their input
-                ;; close the pipe early; that is not an error.
-                (ignore-error error
-                  (with-temp-buffer
-                    (insert-file-contents input-file)
-                    (process-send-region process (point-min) (point-max)))
-                  (process-send-eof process))
-                (let ((reported 0))
-                  (while (and (process-live-p process) (not status))
-                    (accept-process-output process 0.05)
-                    (setq elapsed (- (float-time) start))
-                    (when (and warn-after
-                               (> elapsed warn-after)
-                               (>= (floor elapsed) reported))
-                      (setq reported (1+ (floor elapsed)))
-                      (message "Test %d still running (%.1fs)... %s to abort"
-                               index elapsed (substitute-command-keys "\\[keyboard-quit]")))
-                    (when (and hard-limit (> elapsed hard-limit))
-                      (setq status 'timeout)))))
+              (setq status
+                    (catch timeout
+                      ;; Programs that exit without reading all of their
+                      ;; input close the pipe early; that is not an error.
+                      (ignore-error error
+                        (with-temp-buffer
+                          (insert-file-contents input-file)
+                          (process-send-region process (point-min) (point-max)))
+                        (process-send-eof process))
+                      (while (process-live-p process)
+                        (accept-process-output process 0.05))
+                      nil))
             (quit (setq status 'aborted)))
+          ;; No timer may throw once the catch above is gone.
+          (mapc #'cancel-timer timers)
           (setq elapsed (- (float-time) start))
-          (when status
+          (when (and status (process-live-p process))
             (kill-process process))
           ;; Wait for the process to end and read whatever it wrote.
           (while (accept-process-output process 0.01))
@@ -874,6 +886,7 @@ Return a plist with:
                 :stderr (when stderr-buffer
                           (with-current-buffer stderr-buffer (buffer-string)))
                 :elapsed elapsed))
+      (mapc #'cancel-timer timers)
       (when process (delete-process process))
       (when stderr-process (delete-process stderr-process))
       (kill-buffer stdout-buffer)
