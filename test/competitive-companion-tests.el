@@ -20,7 +20,7 @@
   "A program printing the expected output passes."
   (let ((run (cc-test-run :tests '(("1 2\n" . "1 2\n")) :program 'cat)))
     (should (eq (plist-get run :result) t))
-    (should (member "All tests passed!" (plist-get run :messages)))
+    (should (cc-test-message-matching "\\`All tests passed! (slowest: [0-9.]+s)\\'" run))
     (should-not (string-search "Test 1" (plist-get run :output)))))
 
 (ert-deftest cc-test-run-tests/accepted-ignores-surrounding-whitespace ()
@@ -80,8 +80,9 @@
                             :program 'stderr
                             :separate-stderr separate)))
       (should (eq (plist-get run :result) t))
-      (should (member "All tests passed! [stderr IS BEING USED]"
-                      (plist-get run :messages))))))
+      (should (cc-test-message-matching
+               "\\`All tests passed! (slowest: [0-9.]+s) \\[stderr IS BEING USED\\]\\'"
+               run)))))
 
 (ert-deftest cc-test-run-tests/empty-test-case-is-shown ()
   "An empty test case, as `+' creates it, always shows up."
@@ -277,6 +278,23 @@
       (cc-test-run :tests '(("1\n" . "1\n"))
                    :program (cc-test-counting-program counter "exec sleep 100"))
       (should (= (cc-test-count-lines counter) 1)))))
+
+
+;;;; Display
+
+(ert-deftest cc-test-display/failed-heading-shows-time ()
+  (let ((run (cc-test-run :tests '(("1\n" . "2\n")) :program 'cat)))
+    (should (string-match-p "^Test 1 +WA +([0-9]+\\.[0-9][0-9]s)$" (plist-get run :output)))))
+
+(ert-deftest cc-test-display/tle-heading-shows-when-killed ()
+  (let* ((competitive-companion-time-limit 0.3)
+         (run (cc-test-run :tests '(("1\n" . "1\n")) :program 'hang)))
+    (should (string-match-p "^Test 1 +TLE +(killed after 0\\.[3-9]s)$" (plist-get run :output)))))
+
+(ert-deftest cc-test-display/success-reports-slowest-test ()
+  (let ((run (cc-test-run :tests '(("1\n" . "1\n") ("2\n" . "2\n"))
+                          :program "sleep 0.2; exec cat")))
+    (should (cc-test-message-matching "slowest: 0\\.[2-9][0-9]s" run))))
 
 (provide 'competitive-companion-tests)
 

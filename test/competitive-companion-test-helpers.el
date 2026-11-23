@@ -99,6 +99,12 @@ output buffer's text), :messages (strings passed to `message') and
       (delete-directory contest-dir t))
     (list :result result :output output :messages messages :after after-value)))
 
+(defun cc-test-message-matching (regexp run)
+  "Return the first message of RUN matching REGEXP.
+RUN is a plist with :messages, as returned by `cc-test-run'."
+  (seq-find (lambda (msg) (string-match-p regexp msg))
+            (plist-get run :messages)))
+
 (defmacro cc-test-with-temp-dir (var &rest body)
   "Bind VAR to a fresh temporary directory around BODY, then delete it."
   (declare (indent 1))

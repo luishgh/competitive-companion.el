@@ -474,15 +474,6 @@ The return value indicates if all test cases were successful."
               (not (equal (competitive-companion-test-result-verdict test-result)
                           'ac)))
             test-results)))
-         (accepted-test-results
-          (seq-sort
-           (lambda (result-a result-b)
-             (< (competitive-companion-test-result-index result-a) (competitive-companion-test-result-index result-b)))
-           (seq-filter
-            (lambda (test-result)
-              (equal (competitive-companion-test-result-verdict test-result)
-                     'ac))
-            test-results)))
          (all-success (null failed-test-results))
          (empty-stderr t))
 
@@ -528,7 +519,9 @@ The return value indicates if all test cases were successful."
                   (output-file (competitive-companion-test-result-output-file test-result)))
               (magit-insert-section (competitive-companion-test-section index competitive-companion-collapse-test-cases)
                 (magit-insert-heading (propertize (format "Test %s " index) 'font-lock-face 'magit-section-heading)
-                  (competitive-companion--verdict-string verdict))
+                  (competitive-companion--verdict-string verdict)
+                  " "
+                  (competitive-companion--time-string test-result))
                 (magit-insert-section (competitive-companion-input-section input-file)
                   (magit-insert-heading "Input")
                   (insert (format "%s\n" input-text)))
@@ -549,9 +542,10 @@ The return value indicates if all test cases were successful."
                     (insert (format "%s\n" stdout))))))))
         (goto-char (point-min))
         (if all-success
-            (if empty-stderr
-                (message "All tests passed!")
-              (message "All tests passed! [stderr IS BEING USED]"))
+            (message "All tests passed! (slowest: %.2fs)%s"
+                     (/ (apply #'max 0 (mapcar #'competitive-companion-test-result-time-ms test-results))
+                        1000.0)
+                     (if empty-stderr "" " [stderr IS BEING USED]"))
 
           (message "Some tests failed.")
           (pop-to-buffer output-buffer))))
@@ -922,6 +916,14 @@ are passed to `competitive-companion--execute'."
      :expected expected-output
      :input-file input-file
      :output-file output-file)))
+
+(defun competitive-companion--time-string (test-result)
+  "Return how long TEST-RESULT's program ran, for the output buffer."
+  (let ((seconds (/ (competitive-companion-test-result-time-ms test-result) 1000.0)))
+    (propertize (if (eq (competitive-companion-test-result-verdict test-result) 'tle)
+                    (format "(killed after %.1fs)" seconds)
+                  (format "(%.2fs)" seconds))
+                'font-lock-face 'shadow)))
 
 (defun competitive-companion--verdict-string (verdict)
   "Get VERDICT identifying string.
