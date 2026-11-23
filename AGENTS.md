@@ -9,6 +9,7 @@ Notes for coding agents working on `competitive-companion.el`.
 - `test/competitive-companion-test-helpers.el`: fixtures (`cc-test-run`, `cc-test-make-program`, `cc-test-capturing-messages`).
 - `doc/competitive-companion.org`: the manual. Edit only this file; `doc/competitive-companion.texi` is regenerated from it.
 - `guix.scm`: package definition, also used to run the tests.
+- `integration-manifest.scm`: Guix manifest with the integration tests' dependencies.
 
 ## Running the tests
 
@@ -25,6 +26,26 @@ guix shell emacs emacs-magit coreutils bash -- make check
 ```
 
 A change is not done until `guix build -f guix.scm` succeeds.
+
+### Integration tests (real browser)
+
+`test/competitive-companion-integration-tests.el` drives Chrome with the
+Competitive Companion extension (via Puppeteer, `test/integration/driver.mjs`)
+on live Codeforces/AtCoder pages and judges real C++ solutions
+(`test/integration/solutions/`). It needs the network, Node.js and g++, so
+`make check` and `guix build` do not run it:
+
+```sh
+guix shell -m integration-manifest.scm -- make integration
+```
+
+- `make integration` runs `npm ci` and `fetch-extension.sh` (pinned release,
+  checksum verified) first; downloads go to `test/integration/node_modules/`
+  and `test/integration/.cache/`, both gitignored and excluded from
+  `guix.scm`'s source.
+- Codeforces serves a Cloudflare challenge to headless Chrome: that test is
+  skipped unless `CC_INTEGRATION_HEADFUL=1`.
+- Run it when touching the server, task processing or the test runner.
 
 ## Writing tests
 

@@ -9,7 +9,12 @@
   (name "emacs-competitive-companion")
   (version "0.0.2")
   (source (local-file "." "checkout"
-                      #:recursive? #t))
+                      #:recursive? #t
+                      ;; Leave out the browser driver's dependencies and
+                      ;; downloads (test/integration), hundreds of MB.
+                      #:select? (lambda (file stat)
+                                  (not (member (basename file)
+                                               '("node_modules" ".cache"))))))
   (build-system emacs-build-system)
   (arguments
    (list #:test-command #~(list "make" "check")))

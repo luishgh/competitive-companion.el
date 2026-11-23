@@ -1,0 +1,12 @@
+{
+  "name": "competitive-companion-el-integration",
+  "private": true,
+  "description": "Drives a real browser with the Competitive Companion extension for the integration tests.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "puppeteer": "25.18.1"
+  }
+}

@@ -2,3 +2,7 @@
 *.elc
 *.info
 *.eln
+
+# Browser integration tests: npm dependencies, browser and extension downloads
+/test/integration/node_modules/
+/test/integration/.cache/

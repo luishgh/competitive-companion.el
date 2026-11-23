@@ -16,6 +16,9 @@
 - Accepted and timed out test cases run once, even when stderr is merged
   into the output.
 - Add an ERT test suite, run by =guix build -f guix.scm=.
+- Add integration tests with a real browser, the Competitive Companion
+  extension, live Codeforces and AtCoder problems and compiled C++
+  solutions (=make integration=).
 - Fix problems lost or rejected ("Invalid data received") when the
   browser's request reaches Emacs in several pieces, as happens with
   large test cases.  Non-ASCII problem names are decoded as UTF-8.

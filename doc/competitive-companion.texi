@@ -376,6 +376,14 @@ The package has an ERT test suite in the @samp{test/} directory of its repositor
 guix build -f guix.scm
 @end example
 
+A second suite tests the whole package with a real browser: Chrome@comma{} driven by Puppeteer@comma{} loads the Competitive Companion extension and opens live Codeforces and AtCoder problems@comma{} clicks the extension's button@comma{} and real C++ solutions are compiled and judged. It needs the network@comma{} Node.js and g++@comma{} so it is not part of the Guix build:
+
+@example
+guix shell -m integration-manifest.scm -- make integration
+@end example
+
+The first run downloads Puppeteer@comma{} a Chrome for Testing build and a pinned release of the extension into @samp{test/integration/}. Codeforces shows a Cloudflare challenge to headless browsers@comma{} so its test is skipped unless you set @samp{CC_INTEGRATION_HEADFUL=1}@comma{} which shows the browser. While the tests run@comma{} the extension also sends the problems to the ports of other tools (CP Editor@comma{} CPH@comma{} …) if they are running.
+
 Check the repository's README for details.
 
 @node Function and Command Index
