@@ -474,7 +474,8 @@ The return value indicates if all test cases were successful."
               (not (equal (competitive-companion-test-result-verdict test-result)
                           'ac)))
             test-results)))
-         (all-success (null failed-test-results))
+         (aborted-result (seq-find #'competitive-companion-test-result-aborted test-results))
+         (all-success (and (null failed-test-results) (null aborted-result)))
          (empty-stderr t))
 
     ;; We first check if there was any output to stderr:
@@ -506,7 +507,11 @@ The return value indicates if all test cases were successful."
           (setq-local competitive-companion--original-test-count competitive-companion--test-count))
 
         (magit-insert-section (competitive-companion-root-section)
-          (magit-insert-heading (format "Failed Test Results: (%s)" task))
+          (magit-insert-heading
+            (format "Failed Test Results: (%s)" task)
+            (when aborted-result
+              (format " (aborted at test %d)"
+                      (competitive-companion-test-result-index aborted-result))))
           (insert "\n")
           (dolist (test-result failed-test-results)
             (let ((index (competitive-companion-test-result-index test-result))
@@ -547,7 +552,10 @@ The return value indicates if all test cases were successful."
                         1000.0)
                      (if empty-stderr "" " [stderr IS BEING USED]"))
 
-          (message "Some tests failed.")
+          (if aborted-result
+              (message "Aborted at test %d."
+                       (competitive-companion-test-result-index aborted-result))
+            (message "Some tests failed."))
           (pop-to-buffer output-buffer))))
     all-success))
 
@@ -600,6 +608,7 @@ The return value indicates if all test cases were successful."
   verdict ;; one of: 'ac 'wa 'tle 'mle 'rte
   time-ms
   memory-kb
+  aborted ;; non-nil if the user quit while the program ran
   input
   stdout ;; contains stderr as well if `competitive-companion-separate-stderr' is nil
   stderr
@@ -756,29 +765,38 @@ Powered by competitive-companion.el (https://github.com/luishgh/competitive-comp
         (kill-buffer buffer)))))
 
 (defun competitive-companion--run-test-cases (command task-directory &optional judge-limit)
-  "Run COMMAND against all test cases in TASK-DIRECTORY.
+  "Run COMMAND against all test cases in TASK-DIRECTORY, in order.
 
 JUDGE-LIMIT is the judge's time limit in milliseconds, or nil if unknown.
 It decides how long each test case may run, see
 `competitive-companion-time-limit'.
 
+If the user quits while a test case runs, that test case is aborted
+and the remaining ones are skipped.
+
 Returns a list of `cc-test-result'.
 The order of results is not guaranteed."
-
   (let* ((default-directory task-directory)
-         (test-files (directory-files task-directory t "^input[0-9]+\.txt$"))
+         (indexes (sort (mapcar (lambda (file)
+                                  (string-to-number (substring (file-name-nondirectory file) 5)))
+                                (directory-files task-directory t "^input[0-9]+\\.txt$"))
+                        #'<))
+         (total (length indexes))
          (hard-limit (competitive-companion--hard-limit judge-limit))
          (warn-after (competitive-companion--slow-test-delay judge-limit))
          (test-results (list)))
-    (dolist-with-progress-reporter (input-file test-files test-results)
-        "Running test cases..."
-      (let* ((match-input (file-name-nondirectory input-file))
-             (_ (string-match "[0-9]+" match-input))
-             (index (string-to-number (match-string 0 match-input)))
-             (output-file (expand-file-name (format "output%d.txt" index))))
-        (push (competitive-companion--run-program command index input-file output-file
-                                                  hard-limit warn-after)
-              test-results)))))
+    (cl-loop for index in indexes
+             for position from 1 do
+             (message "Running test %d/%d..." position total)
+             (let ((result (competitive-companion--run-program
+                            command index
+                            (expand-file-name (format "input%d.txt" index))
+                            (expand-file-name (format "output%d.txt" index))
+                            hard-limit warn-after)))
+               (push result test-results)
+               (when (competitive-companion-test-result-aborted result)
+                 (cl-return))))
+    test-results))
 
 (cl-defun competitive-companion--execute (command input-file
                                                   &key index hard-limit warn-after merge-stderr)
@@ -883,6 +901,7 @@ are passed to `competitive-companion--execute'."
                                               :index index
                                               :hard-limit hard-limit
                                               :warn-after warn-after))
+         (aborted (eq (plist-get run :status) 'aborted))
          (stdout (competitive-companion--normalize-output (plist-get run :stdout)))
          (stderr (plist-get run :stderr))
          (verdict (pcase (plist-get run :status)
@@ -899,17 +918,19 @@ are passed to `competitive-companion--execute'."
             (competitive-companion--normalize-output (concat (plist-get run :stdout) stderr)))
            ;; Run again with stderr mixed into stdout, keeping their order.
            (t
-            (competitive-companion--normalize-output
-             (plist-get (competitive-companion--execute command input-file
-                                                        :index index
-                                                        :hard-limit hard-limit
-                                                        :warn-after warn-after
-                                                        :merge-stderr t)
-                        :stdout))))))
+            (let ((merged (competitive-companion--execute command input-file
+                                                          :index index
+                                                          :hard-limit hard-limit
+                                                          :warn-after warn-after
+                                                          :merge-stderr t)))
+              (when (eq (plist-get merged :status) 'aborted)
+                (setq aborted t))
+              (competitive-companion--normalize-output (plist-get merged :stdout)))))))
     (make-competitive-companion-test-result
      :index index
      :verdict verdict
      :time-ms (round (* 1000 (plist-get run :elapsed)))
+     :aborted aborted
      :input input-text
      :stdout shown-output
      :stderr stderr
@@ -920,9 +941,12 @@ are passed to `competitive-companion--execute'."
 (defun competitive-companion--time-string (test-result)
   "Return how long TEST-RESULT's program ran, for the output buffer."
   (let ((seconds (/ (competitive-companion-test-result-time-ms test-result) 1000.0)))
-    (propertize (if (eq (competitive-companion-test-result-verdict test-result) 'tle)
-                    (format "(killed after %.1fs)" seconds)
-                  (format "(%.2fs)" seconds))
+    (propertize (cond
+                 ((competitive-companion-test-result-aborted test-result)
+                  (format "(aborted after %.1fs)" seconds))
+                 ((eq (competitive-companion-test-result-verdict test-result) 'tle)
+                  (format "(killed after %.1fs)" seconds))
+                 (t (format "(%.2fs)" seconds)))
                 'font-lock-face 'shadow)))
 
 (defun competitive-companion--verdict-string (verdict)

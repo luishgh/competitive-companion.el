@@ -53,7 +53,7 @@ printed, which keeps batch logs useful."
                    (apply orig format-string args))))
        ,@body)))
 
-(cl-defun cc-test-run (&key tests program (separate-stderr nil) time-limit after)
+(cl-defun cc-test-run (&key tests program (separate-stderr nil) time-limit after quit-after)
   "Run PROGRAM against TESTS with `competitive-companion-run-tests'.
 
 TESTS is a list of (INPUT . EXPECTED-OUTPUT) strings, written as
@@ -62,7 +62,8 @@ passed to `cc-test-make-program'.  SEPARATE-STDERR is bound as
 `competitive-companion-separate-stderr'.  TIME-LIMIT is the judge's
 time limit in milliseconds, as stored by `competitive-companion--process-data'.
 AFTER, if non-nil, is called with no arguments in the output buffer
-once the run is over.
+once the run is over.  When QUIT-AFTER is non-nil, simulate
+\\[keyboard-quit] after that many seconds.
 
 Everything is set up in a temporary directory and torn down afterwards.
 Return a plist with :result (the command's return value), :output (the
@@ -72,6 +73,8 @@ output buffer's text), :messages (strings passed to `message') and
          (task-dir (expand-file-name ".a" contest-dir))
          (command (cc-test-make-program contest-dir program))
          (competitive-companion-separate-stderr separate-stderr)
+         (timer (when quit-after
+                  (run-at-time quit-after nil (lambda () (setq quit-flag t)))))
          output-buffer result output messages after-value)
     (unwind-protect
         (progn
@@ -94,6 +97,7 @@ output buffer's text), :messages (strings passed to `message') and
             (when after
               (setq after-value (with-current-buffer output-buffer
                                   (funcall after))))))
+      (when timer (cancel-timer timer))
       (when (buffer-live-p output-buffer)
         (kill-buffer output-buffer))
       (delete-directory contest-dir t))
@@ -147,6 +151,19 @@ seconds.  Return the plist from `competitive-companion--execute' with
 (defun cc-test-counting-program (counter-file body)
   "Return a program body that appends a line to COUNTER-FILE, then runs BODY."
   (format "echo run >> %s\n%s" (shell-quote-argument counter-file) body))
+
+(defun cc-test-dispatching-program (log-file hang-on)
+  "Return a program body echoing its input, logged to LOG-FILE.
+The program hangs instead when its input is the string HANG-ON."
+  (format "input=$(cat)\necho \"$input\" >> %s\n[ \"$input\" = %s ] && exec sleep 100\necho \"$input\""
+          (shell-quote-argument log-file) (shell-quote-argument hang-on)))
+
+(defun cc-test-file-string (file)
+  "Return the contents of FILE, or nil if it does not exist."
+  (when (file-exists-p file)
+    (with-temp-buffer
+      (insert-file-contents file)
+      (buffer-string))))
 
 (defun cc-test-count-lines (file)
   "Return the number of lines in FILE, or 0 if it does not exist."

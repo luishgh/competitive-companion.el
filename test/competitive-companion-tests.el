@@ -280,6 +280,51 @@
       (should (= (cc-test-count-lines counter) 1)))))
 
 
+;;;; Running all test cases
+
+(defconst cc-test-three-tests '(("1\n" . "1\n") ("2\n" . "2\n") ("3\n" . "3\n")))
+
+(ert-deftest cc-test-run-tests/hanging-test-does-not-stop-others ()
+  (cc-test-with-temp-dir dir
+    (let* ((log (expand-file-name "log" dir))
+           (competitive-companion-time-limit 0.3)
+           (run (cc-test-run :tests cc-test-three-tests
+                             :program (cc-test-dispatching-program log "2")))
+           (output (plist-get run :output)))
+      (should (null (plist-get run :result)))
+      (should (string-match-p "^Test 2 +TLE" output))
+      (should-not (string-search "Test 1" output))
+      (should-not (string-search "Test 3" output))
+      (should (equal (cc-test-file-string log) "1\n2\n3\n")))))
+
+(ert-deftest cc-test-run-tests/quit-stops-the-run ()
+  "\\[keyboard-quit] aborts the running test and skips the rest."
+  (cc-test-with-temp-dir dir
+    (let* ((log (expand-file-name "log" dir))
+           (competitive-companion-time-limit nil)
+           (run (cc-test-run :tests cc-test-three-tests
+                             :program (cc-test-dispatching-program log "2")
+                             :quit-after 0.3))
+           (output (plist-get run :output)))
+      (should (null (plist-get run :result)))
+      (should (string-search "aborted at test 2" output))
+      (should (string-match-p "^Test 2 +TLE +(aborted after 0\\.[3-9]s)$" output))
+      (should (cc-test-message-matching "\\`Aborted at test 2" run))
+      (should (equal (cc-test-file-string log) "1\n2\n")))))
+
+(ert-deftest cc-test-run-tests/reports-progress ()
+  (let ((run (cc-test-run :tests cc-test-three-tests :program 'cat)))
+    (should (cc-test-message-matching "\\`Running test 2/3" run))))
+
+(ert-deftest cc-test-run-tests/numeric-order ()
+  (cc-test-with-temp-dir dir
+    (let* ((log (expand-file-name "log" dir))
+           (tests (mapcar (lambda (i) (let ((s (format "%d\n" i))) (cons s s)))
+                          (number-sequence 1 11))))
+      (cc-test-run :tests tests :program (cc-test-dispatching-program log "none"))
+      (should (equal (cc-test-file-string log)
+                     (mapconcat (lambda (i) (format "%d\n" i)) (number-sequence 1 11) ""))))))
+
 ;;;; Display
 
 (ert-deftest cc-test-display/failed-heading-shows-time ()
