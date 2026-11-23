@@ -7,7 +7,8 @@ Notes for coding agents working on `competitive-companion.el`.
 - `competitive-companion.el`: the whole package (single file).
 - `test/competitive-companion-tests.el`: ERT suite.
 - `test/competitive-companion-test-helpers.el`: fixtures (`cc-test-run`, `cc-test-make-program`, `cc-test-capturing-messages`).
-- `doc/competitive-companion.org`: the manual. Edit only this file; `doc/competitive-companion.texi` is regenerated from it.
+- `doc/competitive-companion.org`: the user manual. Edit only this file; `doc/competitive-companion.texi` is regenerated from it.
+- `README.org`: overview, installation, and the "Development" section for contributors.
 - `guix.scm`: package definition, also used to run the tests.
 - `integration-manifest.scm`: Guix manifest with the integration tests' dependencies.
 
@@ -64,3 +65,6 @@ guix shell -m integration-manifest.scm -- make integration
 
 - The package keeps no state on disk between Emacs sessions: tasks are re-fetched from the browser extension after a restart. Per-task data lives in buffer-local variables of the task buffer and is copied to its output buffer.
 - Record user-visible changes in `CHANGELOG.org`.
+- The manual is for users only: how to install, use and customize the
+  package.  Development instructions (tests, tooling, how to contribute)
+  go in the "Development" section of `README.org`, never in the manual.

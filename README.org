@@ -88,4 +88,6 @@ The integration tests open live Codeforces and AtCoder problems in a real Chrome
   guix shell -m integration-manifest.scm -- make integration
 #+end_src
 
-Codeforces shows a Cloudflare challenge to headless browsers; set =CC_INTEGRATION_HEADFUL=1= to run its test in a visible browser instead of skipping it.
+=integration-manifest.scm= lists their dependencies. The first run downloads Puppeteer, a Chrome for Testing build and a pinned release of the extension (about 700 MB) into =test/integration/=. Codeforces shows a Cloudflare challenge to headless browsers; set =CC_INTEGRATION_HEADFUL=1= to run its test in a visible browser instead of skipping it. While the tests run, the extension also sends the problems to the ports of other tools (CP Editor, CPH, …) if they are running.
+
+The Info manual (=doc/competitive-companion.org=) is for users; development instructions belong in this section.
