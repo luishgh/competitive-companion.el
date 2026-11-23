@@ -631,20 +631,58 @@ If a server is already running, fails silently."
      :service competitive-companion-server-port
      :family 'ipv4
      :server t
+     ;; Requests are read as bytes: Content-Length counts bytes, and a
+     ;; read may end inside a multibyte character.
+     :coding 'binary
      :filter 'competitive-companion--handle-request)))
 
-(defun competitive-companion--handle-request (connection message)
-  "Handle incoming MESSAGE from the Competitive Companion CONNECTION."
-  (let* ((lines (split-string message "\r\n"))
-         (body (car (last lines))))
-    (let ((data (condition-case nil
-                    (json-parse-string body :object-type 'alist)
-                  (error nil))))
-      (if (not (and data (listp data)))
-          (message "Invalid data received from Competitive Companion: '%s'" body)
-        (process-send-string connection "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
-        (delete-process connection)
-        (competitive-companion--process-data data)))))
+(defun competitive-companion--handle-request (connection chunk)
+  "Handle CHUNK of an HTTP request from the Competitive Companion CONNECTION.
+A request may arrive in several chunks (the browser can write the
+headers and the body separately, and large bodies take several reads),
+so chunks are collected on CONNECTION until the whole body, as told by
+its Content-Length header, is there."
+  (let* ((request (concat (process-get connection 'competitive-companion-request) chunk))
+         (header-end (string-search "\r\n\r\n" request))
+         (headers (and header-end (substring request 0 header-end)))
+         (body-start (and header-end (+ header-end 4)))
+         (body-length (and headers
+                           (let ((case-fold-search t))
+                             (and (string-match "^content-length:[ \t]*\\([0-9]+\\)" headers)
+                                  (string-to-number (match-string 1 headers)))))))
+    (process-put connection 'competitive-companion-request request)
+    (cond
+     ;; Wait for the rest of the headers.
+     ((null header-end))
+     ((null body-length)
+      (competitive-companion--respond connection "411 Length Required"))
+     ;; Wait for the rest of the body.
+     ((< (- (length request) body-start) body-length))
+     (t
+      (let* ((body (decode-coding-string
+                    (substring request body-start (+ body-start body-length))
+                    'utf-8))
+             (data (condition-case nil
+                       (json-parse-string body :object-type 'alist)
+                     (error nil))))
+        (if (not (and data (listp data)))
+            (progn
+              (message "Invalid data received from Competitive Companion: '%s'" body)
+              (competitive-companion--respond connection "400 Bad Request"))
+          ;; Answer last: the browser gives up waiting after a while, and
+          ;; then the answer fails.  The problem is not lost because of it.
+          (unwind-protect
+              (competitive-companion--process-data data)
+            (competitive-companion--respond connection "200 OK"))))))))
+
+(defun competitive-companion--respond (connection status)
+  "Answer the request on CONNECTION with STATUS, then close it.
+The client may have closed the connection already; that is not an error."
+  (process-put connection 'competitive-companion-request nil)
+  (ignore-errors
+    (process-send-string
+     connection (format "HTTP/1.1 %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" status)))
+  (delete-process connection))
 
 (defun competitive-companion--hard-limit (judge-limit)
   "Return the seconds a test case may run, or nil for no limit.

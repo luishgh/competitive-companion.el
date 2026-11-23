@@ -358,6 +358,59 @@ next one, so the merged run times out."
       (should (equal (cc-test-file-string log)
                      (mapconcat (lambda (i) (format "%d\n" i)) (number-sequence 1 11) ""))))))
 
+;;;; The task server
+
+(ert-deftest cc-test-server/request-in-one-piece ()
+  (cc-test-with-server (port dir)
+    (let ((response (cc-test-send-request
+                     port (list (cc-test-http-request (cc-test-problem "A. Sum"))))))
+      (should (string-prefix-p "HTTP/1.1 200 " response))
+      (should (cc-test-task-buffer dir "a.txt")))))
+
+(ert-deftest cc-test-server/headers-and-body-apart ()
+  "Browsers may write the headers and the body separately."
+  (cc-test-with-server (port dir)
+    (let* ((request (cc-test-http-request (cc-test-problem "A. Sum")))
+           (body-start (+ 4 (string-search "\r\n\r\n" request))))
+      (cc-test-capturing-messages messages
+        (should (string-prefix-p
+                 "HTTP/1.1 200 "
+                 (cc-test-send-request port (cc-test-split-at request body-start))))
+        (should (cc-test-task-buffer dir "a.txt"))
+        (should-not (seq-some (lambda (msg) (string-search "Invalid data" msg))
+                              messages))))))
+
+(ert-deftest cc-test-server/body-in-pieces ()
+  "A body read in several pieces, one split inside a character, is decoded."
+  (cc-test-with-server (port dir)
+    (let* ((request (cc-test-http-request (cc-test-problem "A - 積分")))
+           (char-start (string-search (encode-coding-string "積" 'utf-8) request))
+           (buffer nil))
+      (should char-start)
+      (cc-test-send-request port (cc-test-split-at request 30 (1+ char-start) (+ 2 char-start)))
+      (setq buffer (cc-test-task-buffer dir "a.txt"))
+      (should buffer)
+      (should (equal (buffer-local-value 'competitive-companion--current-task-name buffer)
+                     "A - 積分")))))
+
+(ert-deftest cc-test-server/large-body ()
+  "Samples larger than a socket read still arrive whole."
+  (cc-test-with-server (port dir)
+    (let* ((input (make-string 300000 ?7))
+           (problem (cc-test-problem "A. Big" `(tests . [((input . ,input) (output . "7\n"))])))
+           (request (cc-test-http-request problem)))
+      (cc-test-send-request port (cc-test-split-at request 100 100000 200000))
+      (should (cc-test-task-buffer dir "a.txt"))
+      (should (equal (cc-test-file-string (expand-file-name ".a/input1.txt" dir)) input)))))
+
+(ert-deftest cc-test-server/invalid-json-is-answered ()
+  "Invalid data gets an error response and the connection is closed."
+  (cc-test-with-server (port _dir)
+    (cc-test-capturing-messages messages
+      (let ((response (cc-test-send-request port (list (cc-test-http-request "{nope")))))
+        (should (string-prefix-p "HTTP/1.1 400 " response))
+        (should (seq-some (lambda (msg) (string-search "Invalid data" msg)) messages))))))
+
 ;;;; Display
 
 (ert-deftest cc-test-display/failed-heading-shows-time ()

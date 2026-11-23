@@ -173,6 +173,124 @@ The program hangs instead when its input is the string HANG-ON."
         (count-lines (point-min) (point-max)))
     0))
 
+;;;; The task server
+
+(defun cc-test-problem (name &rest extra)
+  "Return problem data named NAME, as sent by the browser extension.
+EXTRA is a list of (KEY . VALUE) pairs added to the front."
+  (append extra
+          `((name . ,name)
+            (group . "Codeforces - Round 1")
+            (url . "https://example.com/problem")
+            (memoryLimit . 256)
+            (timeLimit . 2000)
+            (tests . [((input . "1 2\n") (output . "3\n"))]))))
+
+(defun cc-test-http-request (problem)
+  "Return the HTTP request sending PROBLEM, as an unibyte string.
+PROBLEM is an alist like `cc-test-problem' returns, or a string used as
+the body verbatim."
+  (let ((body (if (stringp problem)
+                  (encode-coding-string problem 'utf-8)
+                (json-serialize problem))))
+    (concat "POST / HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Content-Type: application/json\r\n"
+            (format "Content-Length: %d\r\n" (length body))
+            "\r\n"
+            body)))
+
+(defun cc-test-split-at (string &rest positions)
+  "Split STRING at POSITIONS, which must be increasing."
+  (let ((start 0) chunks)
+    (dolist (position positions)
+      (push (substring string start position) chunks)
+      (setq start position))
+    (nreverse (cons (substring string start) chunks))))
+
+(defun cc-test-wait-for (predicate &optional timeout)
+  "Process events until PREDICATE returns non-nil, or TIMEOUT seconds pass.
+TIMEOUT defaults to 2.  Return PREDICATE's last value."
+  (let ((deadline (+ (float-time) (or timeout 2)))
+        value)
+    (while (and (not (setq value (funcall predicate)))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.02))
+    value))
+
+(defun cc-test-send-request (port chunks &optional delay)
+  "Send CHUNKS to the task server listening on PORT.
+CHUNKS is a list of unibyte strings, written one at a time with DELAY
+seconds (default 0.05) in between, so that the server reads them
+separately.  Wait up to 2 seconds for the server to close the
+connection.  Return the server's response, \"\" if there was none."
+  (let* ((response "")
+         (client (make-network-process
+                  :name "cc-test-client" :host "127.0.0.1" :service port
+                  :family 'ipv4 :coding 'binary :noquery t :sentinel #'ignore
+                  :filter (lambda (_process string)
+                            (setq response (concat response string))))))
+    (unwind-protect
+        (progn
+          (dolist (chunk chunks)
+            (process-send-string client chunk)
+            (accept-process-output nil (or delay 0.05)))
+          (cc-test-wait-for (lambda () (not (process-live-p client))))
+          response)
+      (delete-process client))))
+
+(defmacro cc-test-with-server (spec &rest body)
+  "Run BODY with the task server listening on a random port.
+SPEC is (PORT DIR): PORT is bound to the server's port and DIR to the
+contest directory, a fresh temporary directory.  Tasks are created in
+`fundamental-mode' without running the file generation hook; BODY can
+bind these options again.  Everything is torn down afterwards."
+  (declare (indent 1))
+  (let ((port (car spec)) (dir (cadr spec)))
+    `(let* ((,dir (file-name-as-directory (make-temp-file "cc-test-" t)))
+            (competitive-companion-server-port t)
+            (competitive-companion--contest-directory ,dir)
+            (competitive-companion--prompt-task-filename nil)
+            (competitive-companion-task-major-mode 'fundamental-mode)
+            (competitive-companion-file-generation-hook nil)
+            (competitive-companion-last-problem-data nil))
+       (unwind-protect
+           (let ((,port (progn
+                          (competitive-companion--start-server)
+                          (process-contact (get-process "competitive-companion-server")
+                                           :service))))
+             ,@body)
+         (cc-test-stop-server ,dir)))))
+
+(defun cc-test-stop-server (dir)
+  "Stop the task server and remove everything it made in DIR."
+  (when-let* ((server (get-process "competitive-companion-server")))
+    (delete-process server))
+  (dolist (process (process-list))
+    (when (string-prefix-p "competitive-companion-server" (process-name process))
+      (delete-process process)))
+  (when (boundp 'competitive-companion--pending-tasks)
+    (setq competitive-companion--pending-tasks nil))
+  (dolist (buffer (buffer-list))
+    (let ((file (buffer-file-name buffer)))
+      (when (and file (file-in-directory-p file dir))
+        (with-current-buffer buffer
+          (when (buffer-live-p competitive-companion--output-buffer)
+            (kill-buffer competitive-companion--output-buffer)))
+        (kill-buffer buffer))))
+  (when-let* ((buffer (get-buffer "*competitive-companion-server*")))
+    (kill-buffer buffer))
+  (delete-directory dir t))
+
+(defun cc-test-task-buffer (dir name)
+  "Return the buffer of the task file NAME in DIR, once it is set up.
+Wait up to 2 seconds for it."
+  (cc-test-wait-for
+   (lambda ()
+     (when-let* ((buffer (get-file-buffer (expand-file-name name dir))))
+       (and (buffer-local-value 'competitive-companion--current-task buffer)
+            buffer)))))
+
 (provide 'competitive-companion-test-helpers)
 
 ;; Local Variables:

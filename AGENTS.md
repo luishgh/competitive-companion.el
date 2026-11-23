@@ -32,6 +32,8 @@ A change is not done until `guix build -f guix.scm` succeeds.
 - Test programs are shell scripts written by `cc-test-make-program`; add reusable ones to `cc-test-programs`. Do not depend on a compiler.
 - The shebang must come from `(executable-find "sh")`: Guix build containers have no `/bin/sh`.
 - Everything a test creates (temp dirs, buffers, processes) must be cleaned up in `unwind-protect`.
+- Server tests use `cc-test-with-server` (random port) and send raw HTTP
+  with `cc-test-send-request`, which can split a request into chunks.
 - Batch Emacs does not ignore SIGPIPE: a test that makes Emacs write to a
   dead program's stdin kills the whole run.
 - Keep the suite fast (a few seconds). Timing-based tests use small limits; if one is flaky, widen its bounds instead of adding retries.
