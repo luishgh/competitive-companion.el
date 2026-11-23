@@ -288,6 +288,21 @@ safety net that makes a regression fail instead of hang."
                    :program (cc-test-counting-program counter "exec cat"))
       (should (= (cc-test-count-lines counter) 1)))))
 
+(ert-deftest cc-test-run-tests/rerun-differs-shows-judged-run ()
+  "When the run merging stderr ends differently, the judged run is shown.
+The program prints a wrong answer on its first run and hangs on the
+next one, so the merged run times out."
+  (cc-test-with-temp-dir dir
+    (let* ((flag (shell-quote-argument (expand-file-name "flag" dir)))
+           (competitive-companion-time-limit 0.3)
+           (run (cc-test-run
+                 :tests '(("1\n" . "nope\n"))
+                 :program (format "[ -e %s ] && exec sleep 100\ntouch %s\necho first\necho err >&2"
+                                  flag flag)))
+           (output (plist-get run :output)))
+      (should (string-match-p "^Test 1 +WA" output))
+      (should (string-search "Actual Output\nfirst\nerr\n" output)))))
+
 (ert-deftest cc-test-run-tests/runs-timed-out-test-once ()
   "A hanging program is not waited for twice."
   (cc-test-with-temp-dir dir

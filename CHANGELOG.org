@@ -18,6 +18,9 @@
 - Add an ERT test suite, run by =guix build -f guix.scm=.
 - Kill a program on time even when it never reads a large input (Emacs
   used to hang until ~C-g~).
+- When a failed test case runs again to show stderr mixed with stdout and
+  that run ends differently (nondeterministic programs), show the output
+  of the judged run instead.
 
 * 0.0.2
 

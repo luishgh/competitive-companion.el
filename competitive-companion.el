@@ -923,12 +923,14 @@ are passed to `competitive-companion--execute'."
                                  ((string= stdout expected-output) 'ac)
                                  (t 'wa)))
                     (_ 'rte)))
+         (judged-output
+          (lambda ()
+            (competitive-companion--normalize-output (concat (plist-get run :stdout) stderr))))
          (shown-output
           (cond
            ((or competitive-companion-separate-stderr (eq verdict 'ac)) stdout)
            ;; Running a timed out program again would mean waiting for it twice.
-           ((eq verdict 'tle)
-            (competitive-companion--normalize-output (concat (plist-get run :stdout) stderr)))
+           ((eq verdict 'tle) (funcall judged-output))
            ;; Run again with stderr mixed into stdout, keeping their order.
            (t
             (let ((merged (competitive-companion--execute command input-file
@@ -938,7 +940,13 @@ are passed to `competitive-companion--execute'."
                                                           :merge-stderr t)))
               (when (eq (plist-get merged :status) 'aborted)
                 (setq aborted t))
-              (competitive-companion--normalize-output (plist-get merged :stdout)))))))
+              ;; A program may behave differently on the second run
+              ;; (randomness, timing).  If that run ended differently, its
+              ;; output would not match the verdict: show the judged run's.
+              (if (and (eq (plist-get merged :status) (plist-get run :status))
+                       (eql (plist-get merged :code) (plist-get run :code)))
+                  (competitive-companion--normalize-output (plist-get merged :stdout))
+                (funcall judged-output)))))))
     (make-competitive-companion-test-result
      :index index
      :verdict verdict
